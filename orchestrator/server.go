@@ -300,6 +300,71 @@ func (s *Server) HandleCheckPayment(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"paid": status.Paid, "state": order.State})
 }
 
+// HandleAPIDocs returns agent-friendly API documentation
+func (s *Server) HandleAPIDocs(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	fmt.Fprint(w, `SSOP API — Deploy a self-sovereign AI agent with Lightning
+
+BASE: https://146-190-230-121.sslip.io
+FRONTEND: https://ssop.pages.dev
+
+== ENDPOINTS ==
+
+GET  /api/plans          — List VPS plans (id, cpu, ram, disk, sats_mo)
+GET  /api/models         — List AI models (id, provider, input_per_1m, output_per_1m)
+POST /api/order          — Create deployment order (returns bolt11 Lightning invoice)
+GET  /api/order/{id}     — Get order status
+GET  /api/order/{id}/check — Check if invoice is paid
+GET  /health             — Health check
+
+== CREATE ORDER ==
+
+POST /api/order
+Content-Type: application/json
+
+{
+  "pubkey": "<nostr hex pubkey>",
+  "plan": "tiny|small|medium|large|byom",
+  "model": "claude-opus-4-5|claude-3-7-sonnet|kimi-k2|qwen3-30b-a3b",
+  "nsec": "<nsec1...>",
+  "byom": {"host":"<ip>","user":"root","port":22},
+  "ppq_api_key": "<optional: your own ppq.ai key>",
+  "ssh_pub_key": "<optional: your SSH public key>"
+}
+
+Required: pubkey, plan, model, nsec
+Optional: byom (required if plan=byom), ppq_api_key, ssh_pub_key
+
+Response includes: order_id, bolt11 (Lightning invoice), payment_hash, amount_sats
+
+== PAYMENT ==
+
+Pay the bolt11 invoice with any Lightning wallet.
+Poll GET /api/order/{id}/check until {"paid": true}.
+
+== PLANS ==
+
+tiny:   1 vCPU, 1 GB,  40 GB SSD — 4,200 sats/mo
+small:  2 vCPU, 2 GB,  80 GB SSD — 8,400 sats/mo
+medium: 4 vCPU, 4 GB, 160 GB SSD — 16,800 sats/mo
+large:  8 vCPU, 8 GB, 400 GB SSD — 33,600 sats/mo
+byom:   bring your own machine   — 100 sats (setup fee only)
+
+== MODELS (via ppq.ai) ==
+
+claude-opus-4-5:    $5.00/$25.00 per 1M tokens (most capable)
+claude-3-7-sonnet:  $3.00/$15.00 per 1M tokens (recommended)
+kimi-k2:            $0.39/$1.90  per 1M tokens (best agentic)
+qwen3-30b-a3b:      $0.08/$0.33  per 1M tokens (cheapest)
+
+== AFTER PAYMENT ==
+
+Agent is provisioned with OpenClaw + Nostr DMs.
+DM the agent's npub on any Nostr client to communicate.
+SSH into the VM to customize (SOUL.md, skills, channels).
+`)
+}
+
 func httpError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)

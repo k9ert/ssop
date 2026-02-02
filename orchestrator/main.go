@@ -65,6 +65,9 @@ func main() {
 	// TODO: WebSocket endpoint for real-time status
 	// mux.HandleFunc("GET /api/ws/{id}", srv.HandleWebSocket)
 
+	// Agent-friendly docs
+	mux.HandleFunc("GET /api", srv.HandleAPIDocs)
+
 	// Health check
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{
