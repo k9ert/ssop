@@ -14,18 +14,43 @@
       <p class="tagline">Deploy your own AI agent. Pay with Lightning. No KYC. No cloud accounts. Just sats.</p>
     </header>
 
-    <!-- Step 1: Choose Plan -->
-    <section id="step-plan" class="step active">
-      <h2>1. Choose a Plan</h2>
-      <div id="plans-grid" class="plans-grid">
-        <div class="plan-card skeleton">Loading plans...</div>
+    <!-- Step 1: Setup Fee -->
+    <section id="step-setup" class="step active">
+      <h2>1. Setup Fee</h2>
+      <p>A one-time 100 sat fee to initialize your agent deployment. Goes directly to the platform.</p>
+      <div class="fee-display">
+        <span class="fee-amount">⚡ 100 sats</span>
+        <span class="fee-note">≈ $0.10</span>
       </div>
+      <button id="btn-pay-setup" class="btn btn-primary">Pay Setup Fee</button>
     </section>
 
-    <!-- Step 2: Generate Identity -->
+    <!-- Step 2: Choose Plan -->
+    <section id="step-plan" class="step">
+      <h2>2. Choose Your Server</h2>
+      <p>Pick the hardware for your agent. All plans are KVM instances on <a href="https://lnvps.net" target="_blank">LNVPS</a>.</p>
+      <div id="plans-grid" class="plans-grid"></div>
+    </section>
+
+    <!-- Step 3: Choose Model -->
+    <section id="step-model" class="step">
+      <h2>3. Choose Your Model</h2>
+      <p>Select the AI model your agent will use. Powered by <a href="https://ppq.ai" target="_blank">ppq.ai</a> — pay-per-query, no subscriptions.</p>
+
+      <div id="models-grid" class="models-grid"></div>
+
+      <div class="usage-section">
+        <label>Expected usage:</label>
+        <div id="usage-tiers" class="usage-tiers"></div>
+      </div>
+
+      <div id="cost-estimate" class="cost-estimate hidden"></div>
+    </section>
+
+    <!-- Step 4: Generate Identity -->
     <section id="step-identity" class="step">
-      <h2>2. Generate Agent Identity</h2>
-      <p>Your agent needs a Nostr keypair. This is generated entirely in your browser — the private key never leaves your device.</p>
+      <h2>4. Generate Agent Identity</h2>
+      <p>Your agent needs a Nostr keypair. Generated entirely in your browser — the private key never leaves your device.</p>
       <button id="btn-generate" class="btn btn-primary">Generate Keypair</button>
       <div id="identity-result" class="result hidden">
         <div class="field">
@@ -43,19 +68,24 @@
       </div>
     </section>
 
-    <!-- Step 3: Pay -->
+    <!-- Step 5: Pay for VPS + Model -->
     <section id="step-pay" class="step">
-      <h2>3. Pay with Lightning</h2>
-      <p>Scan the QR code or copy the invoice to pay from any Lightning wallet.</p>
-      <div id="invoice-area" class="invoice-area">
-        <div id="qr-code" class="qr-placeholder">QR code will appear here</div>
+      <h2>5. Pay for Your Agent</h2>
+      <p>One payment covers your first month of VPS hosting and model credits.</p>
+
+      <div class="payment-summary">
+        <div class="field">
+          <label>Total</label>
+          <span id="payment-amount" class="payment-total">—</span>
+        </div>
+        <p id="payment-breakdown" class="payment-breakdown"></p>
+      </div>
+
+      <div class="invoice-area">
+        <div id="qr-code" class="qr-placeholder">QR code</div>
         <div class="invoice-details">
           <div class="field">
-            <label>Amount</label>
-            <span id="invoice-amount">—</span>
-          </div>
-          <div class="field">
-            <label>Invoice</label>
+            <label>Lightning Invoice</label>
             <div class="copy-field">
               <code id="invoice-text" class="truncated"></code>
               <button id="btn-copy-invoice" class="btn btn-small">Copy</button>
@@ -63,25 +93,24 @@
           </div>
         </div>
       </div>
+
       <div id="payment-status" class="status">
         <span class="status-dot waiting"></span>
         <span>Waiting for payment...</span>
       </div>
     </section>
 
-    <!-- Step 4: Provisioning -->
+    <!-- Step 6: Provisioning -->
     <section id="step-provision" class="step">
-      <h2>4. Provisioning Your Agent</h2>
-      <div id="provision-log" class="provision-log">
-        <!-- Filled by WebSocket updates -->
-      </div>
+      <h2>6. Provisioning Your Agent</h2>
+      <div id="provision-log" class="provision-log"></div>
       <div id="provision-status" class="status">
         <span class="status-dot working"></span>
         <span>Setting up your agent...</span>
       </div>
     </section>
 
-    <!-- Step 5: Done -->
+    <!-- Step 7: Done -->
     <section id="step-done" class="step">
       <h2>✅ Your Agent is Live!</h2>
       <div id="agent-details" class="result">
@@ -102,11 +131,11 @@
           <a id="agent-status-url" href="#" target="_blank"></a>
         </div>
       </div>
-      <p class="next-steps">Your agent is running and reachable. Connect a Telegram bot or start chatting via Nostr DMs.</p>
+      <p class="next-steps">Your agent is running. Connect a Telegram bot or chat via Nostr DMs.</p>
     </section>
 
     <footer>
-      <p>Built with ⚡ by <a href="https://github.com/al-munazzim/ssop">SSOP</a></p>
+      <p>Built with ⚡ by <a href="https://github.com/k9ert/ssop">SSOP</a></p>
       <p class="small">Nostr · Lightning · LNVPS · OpenClaw · ppq.ai</p>
     </footer>
   </div>

@@ -1,0 +1,11 @@
+:8080 {
+	root * /home/ubuntu/clawd/projects/ssop/repo/frontend
+	file_server
+	encode gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+}
