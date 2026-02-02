@@ -8,7 +8,7 @@
  */
 
 // --- Config ---
-const ORCHESTRATOR_URL = 'http://146.190.230.121';
+const ORCHESTRATOR_URL = 'https://146-190-230-121.sslip.io';
 
 function getConfig() {
   const params = new URLSearchParams(window.location.search);
