@@ -17,7 +17,7 @@
  */
 
 import { generateKeypair, importKeypair } from './nostr.js';
-import { fetchPlans, fetchModels, createOrder, checkHealth, isMockMode } from './client.js';
+import { fetchPlans, fetchModels, createOrder, checkPayment, checkHealth, isMockMode } from './client.js';
 
 // --- Constants ---
 const SATS_PER_USD = 1000; // ~$100k/BTC approximation
@@ -392,15 +392,13 @@ function renderPaymentSummary(order) {
   $('#payment-breakdown').textContent =
     `${state.selectedPlan.name} VPS (${vpsSats.toLocaleString()}) + ${state.selectedModel.name} credits (${cost.sats.toLocaleString()})`;
 
-  // TODO: real invoice from order.invoice
-  const invoice = order?.invoice || 'lnbc' + totalSats + 'n1mock_invoice_placeholder';
+  const invoice = order?.bolt11 || 'lnbc_mock_no_api';
   $('#invoice-text').textContent = invoice;
 
   showQR('qr-code', invoice);
 
   // Copy button
   const copyBtn = $('#btn-copy-invoice');
-  // Remove old listeners by cloning
   const newBtn = copyBtn.cloneNode(true);
   copyBtn.replaceWith(newBtn);
   newBtn.addEventListener('click', async () => {
@@ -409,10 +407,43 @@ function renderPaymentSummary(order) {
       newBtn.textContent = 'Copied!';
       setTimeout(() => (newBtn.textContent = 'Copy'), 2000);
     } catch {
-      // Fallback for non-HTTPS
       newBtn.textContent = 'Copy failed';
     }
   });
+
+  // Poll for payment (every 3s)
+  if (order?.order_id && !order.mock) {
+    startPaymentPolling(order.order_id);
+  }
+}
+
+function startPaymentPolling(orderId) {
+  const statusEl = $('#payment-status');
+  const poll = setInterval(async () => {
+    try {
+      const result = await checkPayment(orderId);
+      if (result?.paid) {
+        clearInterval(poll);
+        statusEl.innerHTML = '<span class="status-dot done"></span><span>Payment received! ⚡</span>';
+        addLogLine('Payment confirmed. Starting provisioning...');
+        showStep('step-provision');
+        addLogLine('Connecting to server...');
+        // TODO: trigger actual provisioning and poll status
+        setTimeout(() => addLogLine('Installing OpenClaw...'), 2000);
+        setTimeout(() => addLogLine('Configuring agent...'), 4000);
+        setTimeout(() => {
+          addLogLine('Agent is live! ✅', 'success');
+          showStep('step-done');
+          showAgentDetails({
+            vm_ip: state.byom?.host || 'pending',
+            lnaddr: state.keypair?.npub?.slice(0, 20) + '...@npub.cash',
+          });
+        }, 6000);
+      }
+    } catch (err) {
+      console.warn('Payment poll error:', err);
+    }
+  }, 3000);
 }
 
 // ========================================

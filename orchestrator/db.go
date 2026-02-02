@@ -107,6 +107,23 @@ func UpdateOrderState(db *sql.DB, id, state string) error {
 	return err
 }
 
+// UpdateOrderInvoice stores the payment hash and bolt11 for an order
+func UpdateOrderInvoice(db *sql.DB, id, paymentHash, bolt11 string) error {
+	_, err := db.Exec(
+		`UPDATE orders SET setup_invoice = ?, main_invoice = ? WHERE id = ?`,
+		paymentHash, bolt11, id,
+	)
+	return err
+}
+
+// UpdateOrderPaid marks an order as paid
+func UpdateOrderPaid(db *sql.DB, id string) error {
+	_, err := db.Exec(
+		`UPDATE orders SET setup_paid = TRUE, state = 'paid' WHERE id = ?`, id,
+	)
+	return err
+}
+
 // UpdateOrderVM updates the VM details of an order
 func UpdateOrderVM(db *sql.DB, id string, vmID int, vmIP, sshAccess string) error {
 	_, err := db.Exec(

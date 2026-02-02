@@ -12,12 +12,14 @@ import (
 
 // Config holds server configuration
 type Config struct {
-	Port           int    `json:"port"`
-	DBPath         string `json:"db_path"`
-	LNVPSBaseURL   string `json:"lnvps_base_url"`
-	NostrNsec      string `json:"-"` // loaded from env, never serialized
-	SetupFeeSats   int64  `json:"setup_fee_sats"`
+	Port           int     `json:"port"`
+	DBPath         string  `json:"db_path"`
+	LNVPSBaseURL   string  `json:"lnvps_base_url"`
+	NostrNsec      string  `json:"-"` // loaded from env, never serialized
+	SetupFeeSats   int64   `json:"setup_fee_sats"`
 	MarginPercent  float64 `json:"margin_percent"`
+	LNbitsURL      string  `json:"lnbits_url"`
+	LNbitsKey      string  `json:"-"` // invoice key, loaded from env
 }
 
 func main() {
@@ -32,10 +34,15 @@ func main() {
 		NostrNsec:     os.Getenv("NOSTR_NSEC"),
 		SetupFeeSats:  100,
 		MarginPercent: 20.0,
+		LNbitsURL:     getEnv("LNBITS_URL", "https://joyfulseagull4.lnbits.com"),
+		LNbitsKey:     os.Getenv("LNBITS_KEY"),
 	}
 
 	if cfg.NostrNsec == "" {
 		log.Fatal("NOSTR_NSEC environment variable is required")
+	}
+	if cfg.LNbitsKey == "" {
+		log.Fatal("LNBITS_KEY environment variable is required (invoice key for SSOP wallet)")
 	}
 
 	// Initialize database
@@ -54,6 +61,7 @@ func main() {
 	mux.HandleFunc("GET /api/models", srv.HandleGetModels)
 	mux.HandleFunc("POST /api/order", srv.HandleCreateOrder)
 	mux.HandleFunc("GET /api/order/{id}", srv.HandleGetOrder)
+	mux.HandleFunc("GET /api/order/{id}/check", srv.HandleCheckPayment)
 	// TODO: WebSocket endpoint for real-time status
 	// mux.HandleFunc("GET /api/ws/{id}", srv.HandleWebSocket)
 

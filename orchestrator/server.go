@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -22,6 +23,7 @@ type PendingSecrets struct {
 type Server struct {
 	cfg     Config
 	db      *sql.DB
+	lnbits  *LNbitsClient
 	mu      sync.Mutex
 	pending map[string]*PendingSecrets // orderID → secrets (in-memory only, cleared after provisioning)
 }
@@ -31,6 +33,7 @@ func NewServer(cfg Config, db *sql.DB) *Server {
 	return &Server{
 		cfg:     cfg,
 		db:      db,
+		lnbits:  NewLNbitsClient(cfg.LNbitsURL, cfg.LNbitsKey),
 		pending: make(map[string]*PendingSecrets),
 	}
 }
@@ -192,8 +195,21 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Order %s: mode=%s, pubkey=%s..., has_nsec=%v, has_ppq=%v, has_ssh=%v",
 		orderID, mode, pubPrefix, req.Nsec != "", req.PPQAPIKey != "", req.SSHPubKey != "")
 
-	// TODO: Generate Lightning invoice for setup fee
-	// TODO: Return invoice in response
+	// Create Lightning invoice via LNbits
+	memo := fmt.Sprintf("SSOP: %s + %s", plan.Name, model.Name)
+	invoice, err := s.lnbits.CreateInvoice(totalSats, memo)
+	if err != nil {
+		log.Printf("Order %s: LNbits invoice error: %v", orderID, err)
+		httpError(w, "Failed to create Lightning invoice", http.StatusInternalServerError)
+		return
+	}
+
+	// Store payment hash for tracking
+	if err := UpdateOrderInvoice(s.db, orderID, invoice.PaymentHash, invoice.PaymentRequest); err != nil {
+		log.Printf("Order %s: failed to store invoice: %v", orderID, err)
+	}
+
+	log.Printf("Order %s: invoice created for %d sats (hash: %s...)", orderID, totalSats, invoice.PaymentHash[:16])
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -203,7 +219,8 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		"amount_sats": totalSats,
 		"plan":        plan,
 		"model":       model,
-		// "invoice": setupInvoice,
+		"bolt11":      invoice.PaymentRequest,
+		"payment_hash": invoice.PaymentHash,
 	})
 }
 
@@ -228,6 +245,59 @@ func (s *Server) HandleGetOrder(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(order)
+}
+
+// HandleCheckPayment checks if an order's invoice has been paid
+func (s *Server) HandleCheckPayment(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		httpError(w, "Missing order ID", http.StatusBadRequest)
+		return
+	}
+
+	order, err := GetOrder(s.db, id)
+	if err == sql.ErrNoRows {
+		httpError(w, "Order not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		httpError(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	// Already paid?
+	if order.SetupPaid {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"paid": true, "state": order.State})
+		return
+	}
+
+	// No invoice yet
+	if order.SetupInvoice == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{"paid": false, "state": order.State})
+		return
+	}
+
+	// Check with LNbits
+	status, err := s.lnbits.CheckPayment(order.SetupInvoice)
+	if err != nil {
+		log.Printf("Order %s: payment check error: %v", id, err)
+		httpError(w, "Payment check failed", http.StatusInternalServerError)
+		return
+	}
+
+	if status.Paid {
+		// Mark as paid
+		if err := UpdateOrderPaid(s.db, id); err != nil {
+			log.Printf("Order %s: failed to mark paid: %v", id, err)
+		}
+		log.Printf("Order %s: payment confirmed!", id)
+		// TODO: trigger provisioning
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"paid": status.Paid, "state": order.State})
 }
 
 func httpError(w http.ResponseWriter, msg string, code int) {

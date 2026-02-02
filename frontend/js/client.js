@@ -151,6 +151,14 @@ export async function getOrder(orderId) {
 }
 
 /**
+ * Check if an order's invoice has been paid.
+ */
+export async function checkPayment(orderId) {
+  const data = await apiFetch(`/api/order/${orderId}/check`);
+  return data || { paid: false, mock: true };
+}
+
+/**
  * Check API health. Returns { ok, mode, apiBase }.
  */
 export async function checkHealth() {
