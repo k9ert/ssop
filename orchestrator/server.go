@@ -300,69 +300,141 @@ func (s *Server) HandleCheckPayment(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"paid": status.Paid, "state": order.State})
 }
 
-// HandleAPIDocs returns agent-friendly API documentation
+// skillMD is the canonical SKILL.md content served at /api and also at frontend/SKILL.md
+const skillMD = `---
+name: ssop
+version: 0.1.0
+description: Deploy a self-sovereign AI agent on your own VPS. Pay with Lightning. No KYC. No cloud accounts.
+homepage: https://ssop.pages.dev
+metadata: {"category": "infrastructure", "api_base": "https://146-190-230-121.sslip.io"}
+---
+
+# SSOP — Self Sovereign OpenClaw Platform
+
+Deploy your own AI agent on dedicated infrastructure. Pay with Lightning. Own your keys.
+
+**Frontend:** https://ssop.pages.dev
+**API:** https://146-190-230-121.sslip.io
+**SKILL.md:** https://ssop.pages.dev/SKILL.md
+
+## What You Get
+
+Each deployed agent receives:
+- Dedicated KVM VPS on LNVPS (https://lnvps.net) (or your own machine)
+- Nostr keypair (agent identity)
+- Lightning address via npub.cash (https://npub.cash)
+- Pre-configured OpenClaw (https://docs.openclaw.ai) gateway
+- LLM inference via ppq.ai (https://ppq.ai)
+
+## Quick Start (for agents)
+
+You need: a Nostr keypair, a Lightning wallet, and HTTP access.
+
+### 1. Check available plans and models
+
+    curl https://146-190-230-121.sslip.io/api/plans
+    curl https://146-190-230-121.sslip.io/api/models
+
+### 2. Create an order
+
+    curl -X POST https://146-190-230-121.sslip.io/api/order \
+      -H "Content-Type: application/json" \
+      -d '{
+        "pubkey": "<your_nostr_hex_pubkey>",
+        "plan": "tiny",
+        "model": "qwen3-30b-a3b",
+        "nsec": "<nsec1...>"
+      }'
+
+Response:
+
+    {
+      "order_id": "abc123...",
+      "bolt11": "lnbc...",
+      "amount_sats": 5140,
+      "payment_hash": "def456..."
+    }
+
+### 3. Pay the Lightning invoice
+
+Pay the bolt11 with any Lightning wallet. Then poll for confirmation:
+
+    curl https://146-190-230-121.sslip.io/api/order/<order_id>/check
+    # -> {"paid": true, "state": "provisioning"}
+
+### 4. Wait for provisioning
+
+Poll order status until state is "ready":
+
+    curl https://146-190-230-121.sslip.io/api/order/<order_id>
+
+When ready, your agent has SSH access, OpenClaw running, Nostr DMs, and ppq.ai configured.
+
+## API Reference
+
+Base URL: https://146-190-230-121.sslip.io
+
+GET  /api/plans            List VPS plans
+GET  /api/models           List AI models
+POST /api/order            Create deployment order (returns bolt11 invoice)
+GET  /api/order/{id}       Get order status
+GET  /api/order/{id}/check Check payment status
+GET  /api                  This documentation (SKILL.md)
+GET  /health               Health check
+
+### POST /api/order
+
+    {
+      "pubkey": "hex nostr pubkey (required)",
+      "plan": "tiny|small|medium|large|byom (required)",
+      "model": "claude-opus-4-5|claude-3-7-sonnet|kimi-k2|qwen3-30b-a3b (required)",
+      "nsec": "nsec1... (required — held in memory only, never stored)",
+      "byom": {"host": "1.2.3.4", "user": "root", "port": 22},
+      "ppq_api_key": "your own ppq.ai key (optional)",
+      "ssh_pub_key": "ssh-ed25519 AAAA... (optional)"
+    }
+
+## Plans
+
+tiny:   1 vCPU, 1 GB,  40 GB SSD — 4,200 sats/mo (~$3.20)
+small:  2 vCPU, 2 GB,  80 GB SSD — 8,400 sats/mo (~$6.05)
+medium: 4 vCPU, 4 GB, 160 GB SSD — 16,800 sats/mo (~$11.74)
+large:  8 vCPU, 8 GB, 400 GB SSD — 33,600 sats/mo (~$25.99)
+byom:   bring your own machine    — 100 sats (setup fee only)
+
+## Models (via ppq.ai)
+
+claude-opus-4-5:    $5.00/$25.00 per 1M tokens — most capable
+claude-3-7-sonnet:  $3.00/$15.00 per 1M tokens — recommended
+kimi-k2:            $0.39/$1.90  per 1M tokens — best agentic
+qwen3-30b-a3b:      $0.08/$0.33  per 1M tokens — cheapest
+
+Cheapest agent: Tiny + Qwen3-30B-A3B ~ 4,730 sats/mo (~$4.73)
+
+## BYOM (Bring Your Own Machine)
+
+Set plan to "byom" and include byom config. Cost: 100 sats setup fee only. We SSH in and bootstrap OpenClaw.
+
+## Security
+
+- nsec is held in memory only during provisioning — never persisted to database or logs
+- Only the pubkey prefix is logged for debugging
+- All communication over HTTPS
+
+## After Deployment
+
+Your agent runs OpenClaw with Nostr DMs enabled.
+- Nostr DM: Message the agent's npub from any Nostr client
+- SSH: Log in and customize SOUL.md, add skills, configure channels
+- Telegram: Set up a bot token in OpenClaw config
+
+Built with Lightning by SSOP — Nostr, Lightning, LNVPS, OpenClaw, ppq.ai
+`
+
+// HandleAPIDocs returns the SKILL.md content as agent-friendly API documentation
 func (s *Server) HandleAPIDocs(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprint(w, `SSOP API — Deploy a self-sovereign AI agent with Lightning
-
-BASE: https://146-190-230-121.sslip.io
-FRONTEND: https://ssop.pages.dev
-
-== ENDPOINTS ==
-
-GET  /api/plans          — List VPS plans (id, cpu, ram, disk, sats_mo)
-GET  /api/models         — List AI models (id, provider, input_per_1m, output_per_1m)
-POST /api/order          — Create deployment order (returns bolt11 Lightning invoice)
-GET  /api/order/{id}     — Get order status
-GET  /api/order/{id}/check — Check if invoice is paid
-GET  /health             — Health check
-
-== CREATE ORDER ==
-
-POST /api/order
-Content-Type: application/json
-
-{
-  "pubkey": "<nostr hex pubkey>",
-  "plan": "tiny|small|medium|large|byom",
-  "model": "claude-opus-4-5|claude-3-7-sonnet|kimi-k2|qwen3-30b-a3b",
-  "nsec": "<nsec1...>",
-  "byom": {"host":"<ip>","user":"root","port":22},
-  "ppq_api_key": "<optional: your own ppq.ai key>",
-  "ssh_pub_key": "<optional: your SSH public key>"
-}
-
-Required: pubkey, plan, model, nsec
-Optional: byom (required if plan=byom), ppq_api_key, ssh_pub_key
-
-Response includes: order_id, bolt11 (Lightning invoice), payment_hash, amount_sats
-
-== PAYMENT ==
-
-Pay the bolt11 invoice with any Lightning wallet.
-Poll GET /api/order/{id}/check until {"paid": true}.
-
-== PLANS ==
-
-tiny:   1 vCPU, 1 GB,  40 GB SSD — 4,200 sats/mo
-small:  2 vCPU, 2 GB,  80 GB SSD — 8,400 sats/mo
-medium: 4 vCPU, 4 GB, 160 GB SSD — 16,800 sats/mo
-large:  8 vCPU, 8 GB, 400 GB SSD — 33,600 sats/mo
-byom:   bring your own machine   — 100 sats (setup fee only)
-
-== MODELS (via ppq.ai) ==
-
-claude-opus-4-5:    $5.00/$25.00 per 1M tokens (most capable)
-claude-3-7-sonnet:  $3.00/$15.00 per 1M tokens (recommended)
-kimi-k2:            $0.39/$1.90  per 1M tokens (best agentic)
-qwen3-30b-a3b:      $0.08/$0.33  per 1M tokens (cheapest)
-
-== AFTER PAYMENT ==
-
-Agent is provisioned with OpenClaw + Nostr DMs.
-DM the agent's npub on any Nostr client to communicate.
-SSH into the VM to customize (SOUL.md, skills, channels).
-`)
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	fmt.Fprint(w, skillMD)
 }
 
 func httpError(w http.ResponseWriter, msg string, code int) {
