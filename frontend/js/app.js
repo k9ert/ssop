@@ -17,7 +17,7 @@
  */
 
 import { generateKeypair } from './nostr.js';
-import { fetchPlans, fetchModels, createOrder, checkHealth, isMockMode } from './api.js';
+import { fetchPlans, fetchModels, createOrder, checkHealth, isMockMode } from './client.js';
 
 // --- Constants ---
 const SATS_PER_USD = 1000; // ~$100k/BTC approximation
