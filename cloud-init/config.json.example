@@ -1,7 +1,8 @@
 {
   "nsec": "nsec1...",
   "npub": "npub1...",
-  "model_id": "ppq/anthropic/claude-3.7-sonnet",
+  "model_id": "anthropic/claude-3.7-sonnet",
   "ppq_api_key": "ppq_...",
-  "agent_name": "MyAgent"
+  "agent_name": "MyAgent",
+  "owner_npub": "npub1..."
 }
