@@ -15,10 +15,23 @@
 
 set -euo pipefail
 
-# --- 0. Swap for low-memory machines ---
+# --- 0a. Expand partition if needed (LNVPS cloud images ship with small partitions) ---
+ROOT_DEV=$(findmnt -n -o SOURCE /)
+DISK_DEV=$(lsblk -no PKNAME "$ROOT_DEV" 2>/dev/null | head -1)
+if [ -n "$DISK_DEV" ]; then
+  PART_NUM=$(echo "$ROOT_DEV" | grep -o '[0-9]*$')
+  if command -v growpart &>/dev/null; then
+    growpart "/dev/$DISK_DEV" "$PART_NUM" 2>/dev/null && resize2fs "$ROOT_DEV" 2>/dev/null && echo "[0a] Expanded partition $ROOT_DEV" || true
+  else
+    apt-get update -qq && apt-get install -y -qq cloud-guest-utils > /dev/null 2>&1
+    growpart "/dev/$DISK_DEV" "$PART_NUM" 2>/dev/null && resize2fs "$ROOT_DEV" 2>/dev/null && echo "[0a] Expanded partition $ROOT_DEV" || true
+  fi
+fi
+
+# --- 0b. Swap for low-memory machines ---
 TOTAL_MEM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
 if [ "$TOTAL_MEM_MB" -lt 2048 ] && [ ! -f /swapfile ]; then
-  echo "[0/7] Low memory (${TOTAL_MEM_MB}MB) — creating 2GB swap..."
+  echo "[0b] Low memory (${TOTAL_MEM_MB}MB) — creating 2GB swap..."
   fallocate -l 2G /swapfile
   chmod 600 /swapfile
   mkswap /swapfile > /dev/null
@@ -71,24 +84,32 @@ else
   npm install -g openclaw@latest 2>&1 | tail -3
 fi
 
-# --- 4. Install Nostr plugin ---
-echo "[4/7] Installing Nostr channel plugin..."
+# --- 4a. Install Nostr plugin ---
+echo "[4/8] Installing Nostr channel plugin..."
 openclaw plugins install @openclaw/nostr 2>&1 | tail -3 || echo "  (may already be installed)"
 
+# --- 4b. Install nostr-tools globally (required by the Nostr plugin at runtime) ---
+echo "  Installing nostr-tools dependency..."
+npm install -g nostr-tools 2>&1 | tail -1 || true
+
 # --- 5. Configure OpenClaw ---
-echo "[5/7] Configuring OpenClaw..."
+echo "[5/8] Configuring OpenClaw..."
 
 OPENCLAW_DIR="/root/.openclaw"
 WORKSPACE="/root/agent"
 ENV_FILE="/root/.openclaw/env"
 mkdir -p "$OPENCLAW_DIR" "$WORKSPACE" "$WORKSPACE/memory"
 
-# Environment file for systemd (KEY=VALUE format, no export)
+# Environment file for systemd (KEY=VALUE format, no export, no quotes)
 # Limit Node.js heap on low-memory machines to prevent OOM
+# 768MB heap works with 2GB swap on 1GB machines; 384 was too small
 NODE_OPTS="--dns-result-order=ipv4first"
 if [ "$TOTAL_MEM_MB" -lt 2048 ]; then
-  NODE_OPTS="$NODE_OPTS --max-old-space-size=384"
+  NODE_OPTS="$NODE_OPTS --max-old-space-size=768"
 fi
+
+# Generate a random gateway auth token
+GW_TOKEN=$(openssl rand -hex 24)
 cat > "$ENV_FILE" << EOFENV
 NOSTR_PRIVATE_KEY=$NSEC
 PPQ_API_KEY=$PPQ_API_KEY
@@ -149,7 +170,11 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
   },
   "gateway": {
     "port": 18789,
-    "mode": "local"
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": "$GW_TOKEN"
+    }
   }
 }
 EOFCONFIG
@@ -195,7 +220,7 @@ Owner: ${OWNER_NPUB:-unknown}
 EOFMEMORY
 
 # --- 6. Systemd service ---
-echo "[6/7] Setting up systemd service..."
+echo "[6/8] Setting up systemd service..."
 
 cat > /etc/systemd/system/openclaw-gateway.service << EOFSVC
 [Unit]
@@ -219,7 +244,7 @@ systemctl daemon-reload
 systemctl enable openclaw-gateway
 
 # --- 7. Start ---
-echo "[7/7] Starting OpenClaw gateway..."
+echo "[7/8] Starting OpenClaw gateway..."
 systemctl restart openclaw-gateway
 
 # Wait for health
@@ -237,6 +262,7 @@ for i in $(seq 1 30); do
     echo "Relays:    relay.damus.io, relay.primal.net, nos.lol"
     echo "Workspace: $WORKSPACE"
     echo "Gateway:   http://127.0.0.1:18789"
+    echo "GW Token:  $GW_TOKEN"
     echo "DM policy: pairing (owner auto-allowed)"
     echo ""
     echo "Send a Nostr DM to $NPUB to talk to your agent!"
