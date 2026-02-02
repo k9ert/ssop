@@ -79,8 +79,7 @@ header h1 {
 .step.active { display: block; }
 .step.completed {
   display: block;
-  opacity: 0.6;
-  pointer-events: none;
+  opacity: 0.75;
 }
 
 .step h2 {
