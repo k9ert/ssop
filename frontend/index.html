@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSOP — Self Sovereign OpenClaw Platform</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚡ SSOP</h1>
+      <p class="subtitle">Self Sovereign OpenClaw Platform</p>
+      <p class="tagline">Deploy your own AI agent. Pay with Lightning. No KYC. No cloud accounts. Just sats.</p>
+    </header>
+
+    <!-- Step 1: Choose Plan -->
+    <section id="step-plan" class="step active">
+      <h2>1. Choose a Plan</h2>
+      <div id="plans-grid" class="plans-grid">
+        <div class="plan-card skeleton">Loading plans...</div>
+      </div>
+    </section>
+
+    <!-- Step 2: Generate Identity -->
+    <section id="step-identity" class="step">
+      <h2>2. Generate Agent Identity</h2>
+      <p>Your agent needs a Nostr keypair. This is generated entirely in your browser — the private key never leaves your device.</p>
+      <button id="btn-generate" class="btn btn-primary">Generate Keypair</button>
+      <div id="identity-result" class="result hidden">
+        <div class="field">
+          <label>Public Key (npub)</label>
+          <code id="npub"></code>
+        </div>
+        <div class="field">
+          <label>Private Key (nsec)</label>
+          <div class="secret-field">
+            <code id="nsec" class="blurred"></code>
+            <button id="btn-reveal" class="btn btn-small">Reveal</button>
+          </div>
+          <p class="warning">⚠️ Save this somewhere safe. It's the only way to control your agent.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Pay -->
+    <section id="step-pay" class="step">
+      <h2>3. Pay with Lightning</h2>
+      <p>Scan the QR code or copy the invoice to pay from any Lightning wallet.</p>
+      <div id="invoice-area" class="invoice-area">
+        <div id="qr-code" class="qr-placeholder">QR code will appear here</div>
+        <div class="invoice-details">
+          <div class="field">
+            <label>Amount</label>
+            <span id="invoice-amount">—</span>
+          </div>
+          <div class="field">
+            <label>Invoice</label>
+            <div class="copy-field">
+              <code id="invoice-text" class="truncated"></code>
+              <button id="btn-copy-invoice" class="btn btn-small">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="payment-status" class="status">
+        <span class="status-dot waiting"></span>
+        <span>Waiting for payment...</span>
+      </div>
+    </section>
+
+    <!-- Step 4: Provisioning -->
+    <section id="step-provision" class="step">
+      <h2>4. Provisioning Your Agent</h2>
+      <div id="provision-log" class="provision-log">
+        <!-- Filled by WebSocket updates -->
+      </div>
+      <div id="provision-status" class="status">
+        <span class="status-dot working"></span>
+        <span>Setting up your agent...</span>
+      </div>
+    </section>
+
+    <!-- Step 5: Done -->
+    <section id="step-done" class="step">
+      <h2>✅ Your Agent is Live!</h2>
+      <div id="agent-details" class="result">
+        <div class="field">
+          <label>Agent npub</label>
+          <code id="agent-npub"></code>
+        </div>
+        <div class="field">
+          <label>Lightning Address</label>
+          <code id="agent-lnaddr"></code>
+        </div>
+        <div class="field">
+          <label>SSH Access</label>
+          <code id="agent-ssh"></code>
+        </div>
+        <div class="field">
+          <label>Status Page</label>
+          <a id="agent-status-url" href="#" target="_blank"></a>
+        </div>
+      </div>
+      <p class="next-steps">Your agent is running and reachable. Connect a Telegram bot or start chatting via Nostr DMs.</p>
+    </section>
+
+    <footer>
+      <p>Built with ⚡ by <a href="https://github.com/al-munazzim/ssop">SSOP</a></p>
+      <p class="small">Nostr · Lightning · LNVPS · OpenClaw · ppq.ai</p>
+    </footer>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
