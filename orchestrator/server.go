@@ -14,6 +14,7 @@ import (
 // PendingSecrets holds sensitive data in memory during provisioning (never persisted)
 type PendingSecrets struct {
 	Nsec      string      // Nostr private key
+	Npub      string      // Nostr public key (bech32 npub1...)
 	PPQAPIKey string      // ppq.ai API key (user's own, or empty for shared)
 	SSHPubKey string      // user-provided SSH public key
 	BYOM      *BYOMConfig // bring your own machine
@@ -98,6 +99,7 @@ type BYOMConfig struct {
 // CreateOrderRequest is the request body for creating an order
 type CreateOrderRequest struct {
 	Pubkey    string      `json:"pubkey"`
+	Npub      string      `json:"npub,omitempty"`        // bech32 npub for bootstrap config
 	Plan      string      `json:"plan"`
 	Model     string      `json:"model"`
 	Nsec      string      `json:"nsec,omitempty"`        // held in memory, never persisted
@@ -176,6 +178,7 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	// Hold secrets in memory for provisioning — NEVER persisted to DB or logs
 	secrets := &PendingSecrets{
 		Nsec:      req.Nsec,
+		Npub:      req.Npub,
 		PPQAPIKey: req.PPQAPIKey,
 		SSHPubKey: req.SSHPubKey,
 		BYOM:      req.BYOM,
@@ -292,8 +295,8 @@ func (s *Server) HandleCheckPayment(w http.ResponseWriter, r *http.Request) {
 		if err := UpdateOrderPaid(s.db, id); err != nil {
 			log.Printf("Order %s: failed to mark paid: %v", id, err)
 		}
-		log.Printf("Order %s: payment confirmed!", id)
-		// TODO: trigger provisioning
+		log.Printf("Order %s: payment confirmed! Triggering provisioning...", id)
+		go s.ProvisionOrder(id)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

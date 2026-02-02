@@ -17,7 +17,7 @@
  */
 
 import { generateKeypair, importKeypair } from './nostr.js';
-import { fetchPlans, fetchModels, createOrder, checkPayment, checkHealth, isMockMode } from './client.js';
+import { fetchPlans, fetchModels, createOrder, checkPayment, getOrder, checkHealth, isMockMode } from './client.js';
 
 // --- Constants ---
 const SATS_PER_USD = 1000; // ~$100k/BTC approximation
@@ -368,6 +368,7 @@ async function showKeypairAndContinue() {
     state.selectedModel.id,
     state.keypair.nsec,
     {
+      npub: state.keypair.npub,
       byom: state.byom,
       ppqApiKey: state.ppqApiKey,
       sshPubKey: state.sshPubKey,
@@ -419,31 +420,60 @@ function renderPaymentSummary(order) {
 
 function startPaymentPolling(orderId) {
   const statusEl = $('#payment-status');
-  const poll = setInterval(async () => {
+  const paymentPoll = setInterval(async () => {
     try {
       const result = await checkPayment(orderId);
       if (result?.paid) {
-        clearInterval(poll);
+        clearInterval(paymentPoll);
         statusEl.innerHTML = '<span class="status-dot done"></span><span>Payment received! ⚡</span>';
         addLogLine('Payment confirmed. Starting provisioning...');
         showStep('step-provision');
-        addLogLine('Connecting to server...');
-        // TODO: trigger actual provisioning and poll status
-        setTimeout(() => addLogLine('Installing OpenClaw...'), 2000);
-        setTimeout(() => addLogLine('Configuring agent...'), 4000);
-        setTimeout(() => {
-          addLogLine('Agent is live! ✅', 'success');
-          showStep('step-done');
-          showAgentDetails({
-            vm_ip: state.byom?.host || 'pending',
-            lnaddr: state.keypair?.npub?.slice(0, 20) + '...@npub.cash',
-          });
-        }, 6000);
+        // Switch to provisioning status polling
+        startProvisionPolling(orderId);
       }
     } catch (err) {
       console.warn('Payment poll error:', err);
     }
   }, 3000);
+}
+
+function startProvisionPolling(orderId) {
+  const statusEl = $('#provision-status');
+  let lastState = '';
+
+  const poll = setInterval(async () => {
+    try {
+      const order = await getOrder(orderId);
+      const st = order?.state || 'unknown';
+
+      // Show state transitions as log lines
+      if (st !== lastState) {
+        lastState = st;
+        if (st === 'provisioning') {
+          addLogLine('Connecting to server via SSH...');
+          addLogLine('Uploading bootstrap script...');
+          statusEl.innerHTML = '<span class="status-dot working"></span><span>Installing OpenClaw (this may take a few minutes)...</span>';
+        } else if (st === 'ready') {
+          clearInterval(poll);
+          addLogLine('Agent gateway is healthy! ✅', 'success');
+          statusEl.innerHTML = '<span class="status-dot done"></span><span>Provisioning complete!</span>';
+          showStep('step-done');
+          showAgentDetails({
+            vm_ip: order.vm_ip || state.byom?.host || 'pending',
+            ssh: order.ssh_access || `ssh root@${order.vm_ip || state.byom?.host || '<ip>'}`,
+            lnaddr: state.keypair?.npub + '@npub.cash',
+          });
+        } else if (st === 'error') {
+          clearInterval(poll);
+          const errMsg = order.error_msg || 'Unknown error during provisioning';
+          addLogLine(`Error: ${errMsg}`, 'error');
+          statusEl.innerHTML = '<span class="status-dot error"></span><span>Provisioning failed</span>';
+        }
+      }
+    } catch (err) {
+      console.warn('Provision poll error:', err);
+    }
+  }, 4000);
 }
 
 // ========================================

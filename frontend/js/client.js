@@ -122,6 +122,7 @@ export async function createOrder(pubkey, planId, modelId, nsec, extras = {}) {
     model: modelId,
     nsec,
   };
+  if (extras.npub) body.npub = extras.npub;
   if (extras.byom) body.byom = extras.byom;
   if (extras.ppqApiKey) body.ppq_api_key = extras.ppqApiKey;
   if (extras.sshPubKey) body.ssh_pub_key = extras.sshPubKey;

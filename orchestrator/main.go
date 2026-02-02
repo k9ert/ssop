@@ -20,6 +20,8 @@ type Config struct {
 	MarginPercent  float64 `json:"margin_percent"`
 	LNbitsURL      string  `json:"lnbits_url"`
 	LNbitsKey      string  `json:"-"` // invoice key, loaded from env
+	SharedPPQKey   string  `json:"-"` // shared ppq.ai key for agents without their own
+	BootstrapPath  string  `json:"bootstrap_path"`
 }
 
 func main() {
@@ -36,6 +38,8 @@ func main() {
 		MarginPercent: 20.0,
 		LNbitsURL:     getEnv("LNBITS_URL", "https://joyfulseagull4.lnbits.com"),
 		LNbitsKey:     os.Getenv("LNBITS_KEY"),
+		SharedPPQKey:  os.Getenv("SHARED_PPQ_KEY"),
+		BootstrapPath: getEnv("BOOTSTRAP_PATH", "/opt/ssop/bootstrap.sh"),
 	}
 
 	if cfg.NostrNsec == "" {
@@ -43,6 +47,9 @@ func main() {
 	}
 	if cfg.LNbitsKey == "" {
 		log.Fatal("LNBITS_KEY environment variable is required (invoice key for SSOP wallet)")
+	}
+	if cfg.SharedPPQKey == "" {
+		log.Println("WARNING: SHARED_PPQ_KEY not set — agents must provide their own ppq.ai key")
 	}
 
 	// Initialize database
