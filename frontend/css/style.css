@@ -545,6 +545,30 @@ footer .small { font-size: 0.75rem; margin-top: 0.25rem; }
 footer a { color: var(--accent); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
 
+/* === API Status Banner === */
+.api-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  margin-top: 0.75rem;
+}
+
+.api-status.live {
+  color: var(--green);
+  border: 1px solid var(--green);
+  background: #22c55e10;
+}
+
+.api-status.mock {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background: #f7931a10;
+}
+
 /* === Responsive === */
 @media (max-width: 480px) {
   .container { padding: 1rem; }

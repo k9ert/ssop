@@ -2,94 +2,25 @@
  * SSOP Frontend — multi-step agent deployment wizard.
  *
  * Flow:
- *   1. Setup Fee (100 sats) → platform wallet
- *   2. Choose VPS Plan
- *   3. Choose Model + usage tier → cost estimate
- *   4. Pay (VPS + model credits)
- *   5. Provisioning
- *   6. Done
+ *   1. Setup Fee (100 sats)
+ *   2. Choose VPS Plan        ← fetched from orchestrator API
+ *   3. Choose Model + usage   ← fetched from orchestrator API
+ *   4. Generate Nostr Identity
+ *   5. Pay (VPS + model credits)
+ *   6. Provisioning
+ *   7. Done
+ *
+ * Testability:
+ *   ?mock=true   — force mock mode, no API calls
+ *   ?api=<url>   — override orchestrator URL
+ *   ?step=<id>   — jump to step (e.g. ?step=step-model)
  */
 
 import { generateKeypair } from './nostr.js';
+import { fetchPlans, fetchModels, createOrder, checkHealth, isMockMode } from './api.js';
 
-// --- Config ---
-const API_BASE = ''; // Orchestrator URL when ready
+// --- Constants ---
 const SATS_PER_USD = 1000; // ~$100k/BTC approximation
-
-// --- State ---
-let state = {
-  selectedPlan: null,
-  selectedModel: null,
-  selectedUsage: null,
-  keypair: null,
-  orderId: null,
-};
-
-// --- DOM Helpers ---
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
-function showStep(stepId) {
-  $$('.step').forEach((el) => {
-    if (el.id === stepId) {
-      el.classList.add('active');
-      el.classList.remove('completed');
-    } else if (el.classList.contains('active')) {
-      el.classList.remove('active');
-      el.classList.add('completed');
-    }
-  });
-  // Scroll to active step
-  $(`#${stepId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-// --- Models & Pricing ---
-const MODELS = [
-  {
-    id: 'claude-opus-4-5',
-    name: 'Claude Opus 4.5',
-    provider: 'Anthropic',
-    description: 'Most capable. Deep reasoning, nuanced writing, complex tasks.',
-    inputPer1M: 5.0,
-    outputPer1M: 25.0,
-    context: '200K',
-    badge: 'Max Quality',
-    badgeClass: 'badge-premium',
-  },
-  {
-    id: 'claude-3-7-sonnet',
-    name: 'Claude 3.7 Sonnet',
-    provider: 'Anthropic',
-    description: 'Great balance of speed and intelligence. Recommended for most agents.',
-    inputPer1M: 3.0,
-    outputPer1M: 15.0,
-    context: '200K',
-    badge: 'Recommended',
-    badgeClass: 'badge-recommended',
-  },
-  {
-    id: 'moonshotai-kimi-k2',
-    name: 'Kimi K2 Instruct',
-    provider: 'Moonshot AI',
-    description: 'Best for agentic tasks. Handles 200-300 consecutive tool calls without degrading. OpenAI-compatible.',
-    inputPer1M: 0.39,
-    outputPer1M: 1.90,
-    context: '256K',
-    badge: 'Best Agentic',
-    badgeClass: 'badge-agentic',
-  },
-  {
-    id: 'qwen3-30b-a3b',
-    name: 'Qwen3-30B-A3B',
-    provider: 'Alibaba',
-    description: 'MoE architecture — only 3B active params. Blazing fast, dirt cheap. Strong at coding. Apache 2.0 open source.',
-    inputPer1M: 0.08,
-    outputPer1M: 0.33,
-    context: '262K',
-    badge: 'Cheapest',
-    badgeClass: 'badge-cheap',
-  },
-];
 
 // Usage tiers: estimated tokens per month based on agent activity
 const USAGE_TIERS = [
@@ -119,6 +50,35 @@ const USAGE_TIERS = [
   },
 ];
 
+// --- State ---
+let state = {
+  plans: [],
+  models: [],
+  selectedPlan: null,
+  selectedModel: null,
+  selectedUsage: USAGE_TIERS[1], // default: medium
+  keypair: null,
+  orderId: null,
+};
+
+// --- DOM Helpers ---
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function showStep(stepId) {
+  $$('.step').forEach((el) => {
+    if (el.id === stepId) {
+      el.classList.add('active');
+      el.classList.remove('completed');
+    } else if (el.classList.contains('active')) {
+      el.classList.remove('active');
+      el.classList.add('completed');
+    }
+  });
+  $(`#${stepId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// --- Pricing ---
 function calcModelMonthlyCost(model, usage) {
   const monthlyTurns = usage.turnsPerDay * 30;
   const inputTokensM = (monthlyTurns * usage.avgInputTokens) / 1_000_000;
@@ -133,69 +93,38 @@ function calcModelMonthlyCost(model, usage) {
   };
 }
 
-// --- Plans ---
-const PLANS = [
-  {
-    id: 'tiny',
-    name: 'Tiny',
-    cpu: '1 vCPU',
-    ram: '512 MB',
-    disk: '10 GB',
-    satsMo: 4200,
-    fiat: '~€2.70/mo',
-  },
-  {
-    id: 'small',
-    name: 'Small',
-    cpu: '1 vCPU',
-    ram: '1 GB',
-    disk: '20 GB',
-    satsMo: 8400,
-    fiat: '~€5.40/mo',
-  },
-  {
-    id: 'medium',
-    name: 'Medium',
-    cpu: '2 vCPU',
-    ram: '2 GB',
-    disk: '40 GB',
-    satsMo: 16800,
-    fiat: '~€10.80/mo',
-  },
-  {
-    id: 'large',
-    name: 'Large',
-    cpu: '4 vCPU',
-    ram: '4 GB',
-    disk: '80 GB',
-    satsMo: 33600,
-    fiat: '~€21.60/mo',
-  },
-];
+// ========================================
+// Status Banner
+// ========================================
+function showStatusBanner(health) {
+  const existing = $('#api-status');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'api-status';
+  banner.className = `api-status ${health.mode}`;
+
+  if (health.mode === 'live') {
+    banner.innerHTML = `<span class="status-dot done"></span> Live — ${health.apiBase}`;
+  } else {
+    banner.innerHTML = `<span class="status-dot error"></span> Mock mode — API unreachable`;
+  }
+
+  $('header').appendChild(banner);
+}
 
 // ========================================
 // Step 1: Setup Fee
 // ========================================
 function setupFeeStep() {
   $('#btn-pay-setup').addEventListener('click', () => {
-    // TODO: generate real Lightning invoice for 100 sats via orchestrator
     const btn = $('#btn-pay-setup');
     btn.textContent = '⏳ Waiting for payment...';
     btn.disabled = true;
 
-    // Show QR for setup fee
-    const mockSetupInvoice = 'lnbc1000n1pnsetupfee00000000000000000000000000000000000000000000000000000000000000000000000000000000000mock';
-    const qrArea = document.getElementById('setup-qr');
-    if (qrArea && typeof QRCode !== 'undefined') {
-      const canvas = document.createElement('canvas');
-      qrArea.innerHTML = '';
-      qrArea.appendChild(canvas);
-      QRCode.toCanvas(canvas, mockSetupInvoice.toUpperCase(), {
-        width: 180, margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-      }).catch(() => {});
-      qrArea.classList.remove('hidden');
-    }
+    // TODO: generate real Lightning invoice for 100 sats via orchestrator
+    const mockInvoice = 'lnbc1000n1pnsetupfee00000000000000000000000000000000000000000000000000000mock';
+    showQR('setup-qr', mockInvoice);
 
     // Mock: auto-advance after 2s (will be real payment detection)
     setTimeout(() => {
@@ -207,14 +136,15 @@ function setupFeeStep() {
 }
 
 // ========================================
-// Step 2: Choose Plan
+// Step 2: Choose Plan (from API)
 // ========================================
-function renderPlans() {
+function renderPlans(plans) {
   const grid = $('#plans-grid');
   grid.innerHTML = '';
-  PLANS.forEach((plan) => {
+  plans.forEach((plan) => {
     const card = document.createElement('div');
     card.className = 'plan-card';
+    card.dataset.planId = plan.id;
     card.innerHTML = `
       <div class="plan-name">${plan.name}</div>
       <div class="plan-specs">${plan.cpu} · ${plan.ram} · ${plan.disk}</div>
@@ -232,18 +162,19 @@ function renderPlans() {
 }
 
 // ========================================
-// Step 3: Choose Model + Usage
+// Step 3: Choose Model + Usage (from API)
 // ========================================
-function renderModels() {
+function renderModels(models) {
   const grid = $('#models-grid');
   grid.innerHTML = '';
-  MODELS.forEach((model) => {
+  models.forEach((model) => {
     const card = document.createElement('div');
     card.className = 'model-card';
+    card.dataset.modelId = model.id;
     card.innerHTML = `
       <div class="model-header">
         <span class="model-name">${model.name}</span>
-        <span class="badge ${model.badgeClass}">${model.badge}</span>
+        ${model.badge ? `<span class="badge ${model.badgeClass}">${model.badge}</span>` : ''}
       </div>
       <div class="model-provider">${model.provider} · ${model.context} context</div>
       <div class="model-desc">${model.description}</div>
@@ -260,25 +191,26 @@ function renderModels() {
     grid.appendChild(card);
   });
 
-  // Usage tier selector
-  const tierContainer = $('#usage-tiers');
-  tierContainer.innerHTML = '';
+  renderUsageTiers();
+}
+
+function renderUsageTiers() {
+  const container = $('#usage-tiers');
+  container.innerHTML = '';
   USAGE_TIERS.forEach((tier) => {
     const btn = document.createElement('button');
-    btn.className = `btn btn-tier ${tier.id === 'medium' ? 'selected' : ''}`;
+    btn.className = `btn btn-tier ${tier.id === state.selectedUsage.id ? 'selected' : ''}`;
     btn.textContent = tier.name;
     btn.title = tier.description;
+    btn.dataset.tierId = tier.id;
     btn.addEventListener('click', () => {
       $$('.btn-tier').forEach((b) => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.selectedUsage = tier;
       updateCostEstimate();
     });
-    tierContainer.appendChild(btn);
+    container.appendChild(btn);
   });
-
-  // Default to medium
-  state.selectedUsage = USAGE_TIERS[1];
 }
 
 function updateCostEstimate() {
@@ -290,20 +222,14 @@ function updateCostEstimate() {
 
   const cost = calcModelMonthlyCost(state.selectedModel, state.selectedUsage);
   const vpsSats = state.selectedPlan?.satsMo || 0;
-  const totalSats = cost.sats + vpsSats + 100; // model + VPS + setup fee
+  const totalSats = cost.sats + vpsSats + 100;
 
   el.classList.remove('hidden');
   el.innerHTML = `
     <h3>Monthly Cost Estimate</h3>
     <table class="cost-table">
-      <tr>
-        <td>Setup fee (one-time)</td>
-        <td class="cost-val">⚡ 100 sats</td>
-      </tr>
-      <tr>
-        <td>VPS (${state.selectedPlan?.name || '—'})</td>
-        <td class="cost-val">⚡ ${vpsSats.toLocaleString()} sats/mo</td>
-      </tr>
+      <tr><td>Setup fee (one-time)</td><td class="cost-val">⚡ 100 sats</td></tr>
+      <tr><td>VPS (${state.selectedPlan?.name || '—'})</td><td class="cost-val">⚡ ${vpsSats.toLocaleString()} sats/mo</td></tr>
       <tr>
         <td>
           Model (${state.selectedModel.name})
@@ -312,10 +238,7 @@ function updateCostEstimate() {
         </td>
         <td class="cost-val">⚡ ${cost.sats.toLocaleString()} sats/mo<br><span class="cost-usd">~$${cost.usd}</span></td>
       </tr>
-      <tr class="cost-total">
-        <td>Total first month</td>
-        <td class="cost-val">⚡ ${totalSats.toLocaleString()} sats</td>
-      </tr>
+      <tr class="cost-total"><td>Total first month</td><td class="cost-val">⚡ ${totalSats.toLocaleString()} sats</td></tr>
     </table>
     <button id="btn-continue-to-identity" class="btn btn-primary">Continue →</button>
   `;
@@ -329,7 +252,7 @@ function updateCostEstimate() {
 // Step 4: Generate Identity
 // ========================================
 function setupIdentity() {
-  $('#btn-generate').addEventListener('click', () => {
+  $('#btn-generate').addEventListener('click', async () => {
     state.keypair = generateKeypair();
     $('#npub').textContent = state.keypair.npub;
     $('#nsec').textContent = state.keypair.nsec;
@@ -338,76 +261,61 @@ function setupIdentity() {
     $('#btn-reveal').addEventListener('click', () => {
       $('#nsec').classList.toggle('revealed');
       $('#btn-reveal').textContent = $('#nsec').classList.contains('revealed')
-        ? 'Hide'
-        : 'Reveal';
+        ? 'Hide' : 'Reveal';
     });
 
+    // Create order on orchestrator
+    const order = await createOrder(
+      state.keypair.publicKey,
+      state.selectedPlan.id,
+      state.selectedModel.id,
+    );
+    state.orderId = order.order_id;
+    console.log('Order created:', order);
+
     setTimeout(() => showStep('step-pay'), 500);
-    renderPaymentSummary();
+    renderPaymentSummary(order);
   });
 }
 
 // ========================================
-// Step 5: Pay (VPS + Model credits)
+// Step 5: Pay
 // ========================================
-function renderPaymentSummary() {
+function renderPaymentSummary(order) {
   const cost = calcModelMonthlyCost(state.selectedModel, state.selectedUsage);
   const vpsSats = state.selectedPlan.satsMo;
-  const totalSats = cost.sats + vpsSats;
+  const totalSats = order?.amount_sats || (cost.sats + vpsSats);
 
   $('#payment-amount').textContent = `⚡ ${totalSats.toLocaleString()} sats`;
   $('#payment-breakdown').textContent =
     `${state.selectedPlan.name} VPS (${vpsSats.toLocaleString()}) + ${state.selectedModel.name} credits (${cost.sats.toLocaleString()})`;
 
-  // Mock invoice (will be real when orchestrator is live)
-  const mockInvoice = 'lnbc' + totalSats + 'n1pn9qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqmock';
-  $('#invoice-text').textContent = mockInvoice;
+  // TODO: real invoice from order.invoice
+  const invoice = order?.invoice || 'lnbc' + totalSats + 'n1mock_invoice_placeholder';
+  $('#invoice-text').textContent = invoice;
 
-  // Generate QR code
-  const qrCanvas = document.createElement('canvas');
-  $('#qr-code').innerHTML = '';
-  $('#qr-code').appendChild(qrCanvas);
-  if (typeof QRCode !== 'undefined') {
-    QRCode.toCanvas(qrCanvas, mockInvoice.toUpperCase(), {
-      width: 200,
-      margin: 2,
-      color: { dark: '#000000', light: '#ffffff' },
-    }).catch(() => {
-      $('#qr-code').textContent = '[ QR generation failed ]';
-    });
-  }
+  showQR('qr-code', invoice);
 
-  $('#btn-copy-invoice').addEventListener('click', async () => {
-    await navigator.clipboard.writeText(mockInvoice);
-    $('#btn-copy-invoice').textContent = 'Copied!';
-    setTimeout(() => ($('#btn-copy-invoice').textContent = 'Copy'), 2000);
+  // Copy button
+  const copyBtn = $('#btn-copy-invoice');
+  // Remove old listeners by cloning
+  const newBtn = copyBtn.cloneNode(true);
+  copyBtn.replaceWith(newBtn);
+  newBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(invoice);
+      newBtn.textContent = 'Copied!';
+      setTimeout(() => (newBtn.textContent = 'Copy'), 2000);
+    } catch {
+      // Fallback for non-HTTPS
+      newBtn.textContent = 'Copy failed';
+    }
   });
 }
 
 // ========================================
 // Step 6 & 7: Provision + Done
 // ========================================
-function handleStatusUpdate(msg) {
-  switch (msg.status) {
-    case 'paid':
-      $('#payment-status .status-dot').className = 'status-dot done';
-      $('#payment-status span:last-child').textContent = 'Payment received!';
-      showStep('step-provision');
-      break;
-    case 'provisioning':
-      addLogLine(msg.message || 'Provisioning...');
-      break;
-    case 'ready':
-      addLogLine('Agent is live! ✅', 'success');
-      showAgentDetails(msg);
-      setTimeout(() => showStep('step-done'), 1000);
-      break;
-    case 'error':
-      addLogLine(`Error: ${msg.message}`, 'error');
-      break;
-  }
-}
-
 function addLogLine(text, cls = '') {
   const log = $('#provision-log');
   const line = document.createElement('div');
@@ -417,19 +325,79 @@ function addLogLine(text, cls = '') {
   log.scrollTop = log.scrollHeight;
 }
 
-function showAgentDetails(msg) {
-  $('#agent-npub').textContent = state.keypair.npub;
-  $('#agent-lnaddr').textContent = `${state.keypair.publicKey.slice(0, 16)}...@npub.cash`;
-  $('#agent-ssh').textContent = msg.ssh || 'ssh root@<ip>';
-  const statusUrl = msg.statusUrl || '#';
+function showAgentDetails(details) {
+  $('#agent-npub').textContent = state.keypair?.npub || details.pubkey || '—';
+  $('#agent-lnaddr').textContent = details.lnaddr || '—';
+  $('#agent-ssh').textContent = details.ssh || `ssh root@${details.vm_ip || '<ip>'}`;
+  const statusUrl = details.statusUrl || '#';
   $('#agent-status-url').href = statusUrl;
   $('#agent-status-url').textContent = statusUrl;
 }
 
-// --- Init ---
-document.addEventListener('DOMContentLoaded', () => {
+// ========================================
+// QR Code helper
+// ========================================
+function showQR(containerId, data) {
+  const container = document.getElementById(containerId);
+  if (!container || typeof QRCode === 'undefined') return;
+  container.innerHTML = '';
+  container.classList.remove('hidden');
+  const canvas = document.createElement('canvas');
+  container.appendChild(canvas);
+  QRCode.toCanvas(canvas, data.toUpperCase(), {
+    width: 200, margin: 2,
+    color: { dark: '#000000', light: '#ffffff' },
+  }).catch(() => {
+    container.textContent = '[ QR failed ]';
+  });
+}
+
+// ========================================
+// Debug: jump to step via ?step=
+// ========================================
+function handleStepParam() {
+  const params = new URLSearchParams(window.location.search);
+  const step = params.get('step');
+  if (step) {
+    // Activate all prior steps as completed
+    const steps = [...$$('.step')];
+    let found = false;
+    steps.forEach((el) => {
+      if (el.id === step) {
+        found = true;
+        el.classList.add('active');
+        el.classList.remove('completed');
+      } else if (!found) {
+        el.classList.add('completed');
+        el.classList.remove('active');
+      } else {
+        el.classList.remove('active', 'completed');
+      }
+    });
+  }
+}
+
+// ========================================
+// Init
+// ========================================
+document.addEventListener('DOMContentLoaded', async () => {
+  // Check API health and show status
+  const health = await checkHealth();
+  showStatusBanner(health);
+
+  // Fetch data from API (or mock)
+  const [plans, models] = await Promise.all([fetchPlans(), fetchModels()]);
+  state.plans = plans;
+  state.models = models;
+
+  // Render
   setupFeeStep();
-  renderPlans();
-  renderModels();
+  renderPlans(plans);
+  renderModels(models);
   setupIdentity();
+
+  // Debug: allow jumping to a step
+  handleStepParam();
+
+  console.log(`SSOP initialized — mode: ${health.mode}, plans: ${plans.length}, models: ${models.length}`);
 });
