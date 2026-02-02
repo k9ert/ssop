@@ -545,6 +545,64 @@ footer .small { font-size: 0.75rem; margin-top: 0.25rem; }
 footer a { color: var(--accent); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
 
+/* === Identity Tabs === */
+.identity-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.btn-tab {
+  flex: 1;
+  text-align: center;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
+.identity-panel {
+  margin-bottom: 1rem;
+}
+
+.input-nsec {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-nsec:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.input-nsec::placeholder {
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}
+
 /* === API Status Banner === */
 .api-status {
   display: inline-flex;

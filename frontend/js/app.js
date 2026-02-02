@@ -16,7 +16,7 @@
  *   ?step=<id>   — jump to step (e.g. ?step=step-model)
  */
 
-import { generateKeypair } from './nostr.js';
+import { generateKeypair, importKeypair } from './nostr.js';
 import { fetchPlans, fetchModels, createOrder, checkHealth, isMockMode } from './client.js';
 
 // --- Constants ---
@@ -249,33 +249,87 @@ function updateCostEstimate() {
 }
 
 // ========================================
-// Step 4: Generate Identity
+// Step 4: Agent Identity (Generate or Import)
 // ========================================
 function setupIdentity() {
-  $('#btn-generate').addEventListener('click', async () => {
-    state.keypair = generateKeypair();
-    $('#npub').textContent = state.keypair.npub;
-    $('#nsec').textContent = state.keypair.nsec;
-    $('#identity-result').classList.remove('hidden');
+  const tabGenerate = $('#tab-generate');
+  const tabImport = $('#tab-import');
+  const panelGenerate = $('#panel-generate');
+  const panelImport = $('#panel-import');
 
-    $('#btn-reveal').addEventListener('click', () => {
-      $('#nsec').classList.toggle('revealed');
-      $('#btn-reveal').textContent = $('#nsec').classList.contains('revealed')
-        ? 'Hide' : 'Reveal';
-    });
-
-    // Create order on orchestrator
-    const order = await createOrder(
-      state.keypair.publicKey,
-      state.selectedPlan.id,
-      state.selectedModel.id,
-    );
-    state.orderId = order.order_id;
-    console.log('Order created:', order);
-
-    setTimeout(() => showStep('step-pay'), 500);
-    renderPaymentSummary(order);
+  // Tab switching
+  tabGenerate.addEventListener('click', () => {
+    tabGenerate.classList.add('active');
+    tabImport.classList.remove('active');
+    panelGenerate.classList.remove('hidden');
+    panelImport.classList.add('hidden');
   });
+
+  tabImport.addEventListener('click', () => {
+    tabImport.classList.add('active');
+    tabGenerate.classList.remove('active');
+    panelImport.classList.remove('hidden');
+    panelGenerate.classList.add('hidden');
+  });
+
+  // Generate new keypair
+  $('#btn-generate').addEventListener('click', () => {
+    state.keypair = generateKeypair();
+    showKeypairAndContinue();
+  });
+
+  // Import existing nsec
+  $('#btn-import').addEventListener('click', () => {
+    const nsecInput = $('#nsec-input').value;
+    try {
+      state.keypair = importKeypair(nsecInput);
+      showKeypairAndContinue();
+    } catch (err) {
+      alert(`Invalid nsec: ${err.message}`);
+    }
+  });
+
+  // Also allow Enter key in nsec input
+  $('#nsec-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('#btn-import').click();
+  });
+}
+
+async function showKeypairAndContinue() {
+  const cfg = new URLSearchParams(window.location.search);
+  const isTest = cfg.get('mock') === 'true';
+
+  $('#npub').textContent = state.keypair.npub;
+  $('#nsec').textContent = state.keypair.nsec;
+  $('#identity-result').classList.remove('hidden');
+
+  // In test/mock mode, reveal nsec by default
+  const nsecEl = $('#nsec');
+  if (isTest) {
+    nsecEl.classList.remove('blurred');
+    nsecEl.classList.add('revealed');
+  }
+
+  // Reveal toggle
+  $('#btn-reveal').addEventListener('click', () => {
+    nsecEl.classList.toggle('revealed');
+    nsecEl.classList.toggle('blurred');
+    $('#btn-reveal').textContent = nsecEl.classList.contains('revealed')
+      ? 'Hide' : 'Reveal';
+  });
+
+  // Create order on orchestrator (sends nsec for LNVPS provisioning)
+  const order = await createOrder(
+    state.keypair.publicKey,
+    state.selectedPlan.id,
+    state.selectedModel.id,
+    state.keypair.nsec,
+  );
+  state.orderId = order.order_id;
+  console.log('Order created:', order);
+
+  setTimeout(() => showStep('step-pay'), 500);
+  renderPaymentSummary(order);
 }
 
 // ========================================

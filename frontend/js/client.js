@@ -104,12 +104,14 @@ export async function fetchModels() {
 
 /**
  * Create an order on the orchestrator.
+ * Sends nsec for LNVPS provisioning (orchestrator uses it for NIP-98 auth,
+ * does not persist it).
  * Returns order details or mock response.
  */
-export async function createOrder(pubkey, planId, modelId) {
+export async function createOrder(pubkey, planId, modelId, nsec) {
   const data = await apiFetch('/api/order', {
     method: 'POST',
-    body: JSON.stringify({ pubkey, plan: planId, model: modelId }),
+    body: JSON.stringify({ pubkey, plan: planId, model: modelId, nsec }),
   });
 
   if (data) return data;

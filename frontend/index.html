@@ -48,11 +48,29 @@
       <div id="cost-estimate" class="cost-estimate hidden"></div>
     </section>
 
-    <!-- Step 4: Generate Identity -->
+    <!-- Step 4: Agent Identity -->
     <section id="step-identity" class="step">
-      <h2>4. Generate Agent Identity</h2>
-      <p>Your agent needs a Nostr keypair. Generated entirely in your browser — the private key never leaves your device.</p>
-      <button id="btn-generate" class="btn btn-primary">Generate Keypair</button>
+      <h2>4. Agent Identity</h2>
+      <p>Your agent needs a Nostr keypair. This key is the agent's identity — it controls the LNVPS account and can receive Lightning payments via <a href="https://npub.cash" target="_blank">npub.cash</a>.</p>
+
+      <div class="identity-tabs">
+        <button id="tab-generate" class="btn btn-tab active">Generate New</button>
+        <button id="tab-import" class="btn btn-tab">Import Existing</button>
+      </div>
+
+      <div id="panel-generate" class="identity-panel">
+        <button id="btn-generate" class="btn btn-primary">Generate Keypair</button>
+      </div>
+
+      <div id="panel-import" class="identity-panel hidden">
+        <div class="field">
+          <label>Paste your nsec</label>
+          <input id="nsec-input" type="password" class="input-nsec" placeholder="nsec1..." autocomplete="off" spellcheck="false">
+        </div>
+        <button id="btn-import" class="btn btn-primary">Use This Key</button>
+        <p class="hint">The nsec will be sent to the orchestrator to provision your VM on LNVPS. It is not stored after provisioning.</p>
+      </div>
+
       <div id="identity-result" class="result hidden">
         <div class="field">
           <label>Public Key (npub)</label>
@@ -64,7 +82,7 @@
             <code id="nsec" class="blurred"></code>
             <button id="btn-reveal" class="btn btn-small">Reveal</button>
           </div>
-          <p class="warning">⚠️ Save this somewhere safe. It's the only way to control your agent.</p>
+          <p class="warning">⚠️ Save this somewhere safe. It's the only way to control your agent and LNVPS account.</p>
         </div>
       </div>
     </section>

@@ -7,17 +7,24 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 )
 
 // Server holds the application state
 type Server struct {
-	cfg Config
-	db  *sql.DB
+	cfg         Config
+	db          *sql.DB
+	mu          sync.Mutex
+	pendingKeys map[string]string // orderID → nsec (in-memory only, cleared after provisioning)
 }
 
 // NewServer creates a new server instance
 func NewServer(cfg Config, db *sql.DB) *Server {
-	return &Server{cfg: cfg, db: db}
+	return &Server{
+		cfg:         cfg,
+		db:          db,
+		pendingKeys: make(map[string]string),
+	}
 }
 
 // Plan represents a VPS plan
@@ -75,6 +82,7 @@ type CreateOrderRequest struct {
 	Pubkey string `json:"pubkey"`
 	Plan   string `json:"plan"`
 	Model  string `json:"model"`
+	Nsec   string `json:"nsec,omitempty"` // held in memory for LNVPS provisioning, never persisted
 }
 
 // HandleCreateOrder creates a new deployment order
@@ -131,6 +139,14 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to create order: %v", err)
 		httpError(w, "Internal error", http.StatusInternalServerError)
 		return
+	}
+
+	// Hold nsec in memory for provisioning — NEVER persisted to DB or logs
+	if req.Nsec != "" {
+		s.mu.Lock()
+		s.pendingKeys[orderID] = req.Nsec
+		s.mu.Unlock()
+		log.Printf("Order %s: nsec received for LNVPS provisioning (pubkey: %s...)", orderID, req.Pubkey[:16])
 	}
 
 	// TODO: Generate Lightning invoice for setup fee
