@@ -168,7 +168,7 @@ func (s *Server) ProvisionOrder(orderID string) {
 
 	// --- Step 4: Execute bootstrap ---
 	log.Printf("Order %s: [4/5] Running bootstrap (may take several minutes)...", orderID)
-	runCmd := exec.Command("ssh", append(sshOpts, target, "bash", "/tmp/ssop-bootstrap.sh", "/tmp/ssop-config.json")...)
+	runCmd := exec.Command("ssh", append(sshOpts, target, "sudo", "bash", "/tmp/ssop-bootstrap.sh", "/tmp/ssop-config.json")...)
 	runOut, err := runCmd.CombinedOutput()
 	output := string(runOut)
 

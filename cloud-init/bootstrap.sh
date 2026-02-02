@@ -15,6 +15,17 @@
 
 set -euo pipefail
 
+# --- 0. Swap for low-memory machines ---
+TOTAL_MEM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
+if [ "$TOTAL_MEM_MB" -lt 2048 ] && [ ! -f /swapfile ]; then
+  echo "[0/7] Low memory (${TOTAL_MEM_MB}MB) — creating 2GB swap..."
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile > /dev/null
+  swapon /swapfile
+  echo "/swapfile none swap sw 0 0" >> /etc/fstab
+fi
+
 CONFIG_FILE="${1:-/tmp/ssop-config.json}"
 
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -73,10 +84,15 @@ ENV_FILE="/root/.openclaw/env"
 mkdir -p "$OPENCLAW_DIR" "$WORKSPACE" "$WORKSPACE/memory"
 
 # Environment file for systemd (KEY=VALUE format, no export)
+# Limit Node.js heap on low-memory machines to prevent OOM
+NODE_OPTS="--dns-result-order=ipv4first"
+if [ "$TOTAL_MEM_MB" -lt 2048 ]; then
+  NODE_OPTS="$NODE_OPTS --max-old-space-size=384"
+fi
 cat > "$ENV_FILE" << EOFENV
 NOSTR_PRIVATE_KEY=$NSEC
 PPQ_API_KEY=$PPQ_API_KEY
-NODE_OPTIONS=--dns-result-order=ipv4first
+NODE_OPTIONS=$NODE_OPTS
 EOFENV
 chmod 600 "$ENV_FILE"
 
@@ -133,10 +149,7 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
   },
   "gateway": {
     "port": 18789,
-    "mode": "local",
-    "heartbeat": {
-      "intervalMinutes": 30
-    }
+    "mode": "local"
   }
 }
 EOFCONFIG
