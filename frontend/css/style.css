@@ -603,6 +603,42 @@ footer a:hover { text-decoration: underline; }
   line-height: 1.4;
 }
 
+/* === Advanced Sections === */
+.advanced-section {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+}
+
+.advanced-section summary {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.advanced-section summary:hover {
+  color: var(--accent);
+}
+
+.advanced-section[open] summary {
+  margin-bottom: 0.75rem;
+  color: var(--accent);
+}
+
+.advanced-section .field {
+  margin-top: 0.5rem;
+}
+
+.advanced-section code {
+  background: var(--bg-card);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
 /* === API Status Banner === */
 .api-status {
   display: inline-flex;

@@ -59,6 +59,10 @@ let state = {
   selectedUsage: USAGE_TIERS[1], // default: medium
   keypair: null,
   orderId: null,
+  // Injectable overrides
+  byom: null,        // { host, user, port } — bring your own machine
+  ppqApiKey: null,    // user-provided ppq.ai key
+  sshPubKey: null,    // user-provided SSH public key
 };
 
 // --- DOM Helpers ---
@@ -136,8 +140,40 @@ function setupFeeStep() {
 }
 
 // ========================================
-// Step 2: Choose Plan (from API)
+// Step 2: Choose Plan (from API) or BYOM
 // ========================================
+function setupPlanStep() {
+  const tabLnvps = $('#tab-lnvps');
+  const tabByom = $('#tab-byom');
+  const panelLnvps = $('#panel-lnvps');
+  const panelByom = $('#panel-byom');
+
+  tabLnvps.addEventListener('click', () => {
+    tabLnvps.classList.add('active');
+    tabByom.classList.remove('active');
+    panelLnvps.classList.remove('hidden');
+    panelByom.classList.add('hidden');
+    state.byom = null;
+  });
+
+  tabByom.addEventListener('click', () => {
+    tabByom.classList.add('active');
+    tabLnvps.classList.remove('active');
+    panelByom.classList.remove('hidden');
+    panelLnvps.classList.add('hidden');
+  });
+
+  $('#btn-use-byom').addEventListener('click', () => {
+    const host = $('#byom-host').value.trim();
+    const user = $('#byom-user').value.trim() || 'root';
+    const port = parseInt($('#byom-port').value.trim()) || 22;
+    if (!host) { alert('Please enter a host IP or hostname.'); return; }
+    state.byom = { host, user, port };
+    state.selectedPlan = { id: 'byom', name: 'Your Machine', satsMo: 0, fiat: '$0', cpu: '?', ram: '?', disk: '?' };
+    showStep('step-model');
+  });
+}
+
 function renderPlans(plans) {
   const grid = $('#plans-grid');
   grid.innerHTML = '';
@@ -155,6 +191,7 @@ function renderPlans(plans) {
       $$('.plan-card').forEach((c) => c.classList.remove('selected'));
       card.classList.add('selected');
       state.selectedPlan = plan;
+      state.byom = null;
       showStep('step-model');
     });
     grid.appendChild(card);
@@ -318,12 +355,23 @@ async function showKeypairAndContinue() {
       ? 'Hide' : 'Reveal';
   });
 
-  // Create order on orchestrator (sends nsec for LNVPS provisioning)
+  // Collect injectable overrides
+  const ppqKey = $('#ppq-key-input')?.value?.trim() || null;
+  const sshKey = $('#ssh-key-input')?.value?.trim() || null;
+  if (ppqKey) state.ppqApiKey = ppqKey;
+  if (sshKey) state.sshPubKey = sshKey;
+
+  // Create order on orchestrator (sends all keys for provisioning)
   const order = await createOrder(
     state.keypair.publicKey,
     state.selectedPlan.id,
     state.selectedModel.id,
     state.keypair.nsec,
+    {
+      byom: state.byom,
+      ppqApiKey: state.ppqApiKey,
+      sshPubKey: state.sshPubKey,
+    },
   );
   state.orderId = order.order_id;
   console.log('Order created:', order);
@@ -446,6 +494,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Render
   setupFeeStep();
+  setupPlanStep();
   renderPlans(plans);
   renderModels(models);
   setupIdentity();

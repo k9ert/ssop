@@ -29,8 +29,34 @@
     <!-- Step 2: Choose Plan -->
     <section id="step-plan" class="step">
       <h2>2. Choose Your Server</h2>
-      <p>Pick the hardware for your agent. All plans are KVM instances on <a href="https://lnvps.net" target="_blank">LNVPS</a>.</p>
-      <div id="plans-grid" class="plans-grid"></div>
+      <p>Pick the hardware for your agent, or bring your own machine.</p>
+
+      <div class="identity-tabs">
+        <button id="tab-lnvps" class="btn btn-tab active">LNVPS Plans</button>
+        <button id="tab-byom" class="btn btn-tab">Bring Your Own</button>
+      </div>
+
+      <div id="panel-lnvps" class="identity-panel">
+        <p class="hint">KVM instances on <a href="https://lnvps.net" target="_blank">LNVPS</a>. Paid with Lightning. No KYC.</p>
+        <div id="plans-grid" class="plans-grid"></div>
+      </div>
+
+      <div id="panel-byom" class="identity-panel hidden">
+        <p class="hint">Already have a VPS? Enter SSH details and we'll bootstrap OpenClaw on it.</p>
+        <div class="field">
+          <label>Host (IP or hostname)</label>
+          <input id="byom-host" type="text" class="input-nsec" placeholder="1.2.3.4 or my-server.example.com" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>SSH User</label>
+          <input id="byom-user" type="text" class="input-nsec" placeholder="root" value="root" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>SSH Port</label>
+          <input id="byom-port" type="text" class="input-nsec" placeholder="22" value="22" autocomplete="off">
+        </div>
+        <button id="btn-use-byom" class="btn btn-primary">Use This Machine →</button>
+      </div>
     </section>
 
     <!-- Step 3: Choose Model -->
@@ -46,6 +72,15 @@
       </div>
 
       <div id="cost-estimate" class="cost-estimate hidden"></div>
+
+      <details class="advanced-section">
+        <summary>Advanced: Use your own ppq.ai key</summary>
+        <div class="field">
+          <label>ppq.ai API Key</label>
+          <input id="ppq-key-input" type="password" class="input-nsec" placeholder="ppq_... (leave blank to use shared)" autocomplete="off">
+        </div>
+        <p class="hint">Get one free: <code>curl -X POST https://api.ppq.ai/accounts/create</code> — top up with Lightning.</p>
+      </details>
     </section>
 
     <!-- Step 4: Agent Identity -->
@@ -85,6 +120,15 @@
           <p class="warning">⚠️ Save this somewhere safe. It's the only way to control your agent and LNVPS account.</p>
         </div>
       </div>
+
+      <details class="advanced-section">
+        <summary>Advanced: Use your own SSH key</summary>
+        <div class="field">
+          <label>SSH Public Key</label>
+          <input id="ssh-key-input" type="text" class="input-nsec" placeholder="ssh-ed25519 AAAA... (leave blank to auto-generate)" autocomplete="off">
+        </div>
+        <p class="hint">If provided, this key will be uploaded to LNVPS for VM access. Otherwise one is generated during provisioning.</p>
+      </details>
     </section>
 
     <!-- Step 5: Pay for VPS + Model -->

@@ -10,20 +10,28 @@ import (
 	"sync"
 )
 
+// PendingSecrets holds sensitive data in memory during provisioning (never persisted)
+type PendingSecrets struct {
+	Nsec      string      // Nostr private key
+	PPQAPIKey string      // ppq.ai API key (user's own, or empty for shared)
+	SSHPubKey string      // user-provided SSH public key
+	BYOM      *BYOMConfig // bring your own machine
+}
+
 // Server holds the application state
 type Server struct {
-	cfg         Config
-	db          *sql.DB
-	mu          sync.Mutex
-	pendingKeys map[string]string // orderID → nsec (in-memory only, cleared after provisioning)
+	cfg     Config
+	db      *sql.DB
+	mu      sync.Mutex
+	pending map[string]*PendingSecrets // orderID → secrets (in-memory only, cleared after provisioning)
 }
 
 // NewServer creates a new server instance
 func NewServer(cfg Config, db *sql.DB) *Server {
 	return &Server{
-		cfg:         cfg,
-		db:          db,
-		pendingKeys: make(map[string]string),
+		cfg:     cfg,
+		db:      db,
+		pending: make(map[string]*PendingSecrets),
 	}
 }
 
@@ -77,12 +85,22 @@ func (s *Server) HandleGetModels(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"models": models})
 }
 
+// BYOMConfig is the "bring your own machine" SSH details
+type BYOMConfig struct {
+	Host string `json:"host"`
+	User string `json:"user"`
+	Port int    `json:"port"`
+}
+
 // CreateOrderRequest is the request body for creating an order
 type CreateOrderRequest struct {
-	Pubkey string `json:"pubkey"`
-	Plan   string `json:"plan"`
-	Model  string `json:"model"`
-	Nsec   string `json:"nsec,omitempty"` // held in memory for LNVPS provisioning, never persisted
+	Pubkey    string      `json:"pubkey"`
+	Plan      string      `json:"plan"`
+	Model     string      `json:"model"`
+	Nsec      string      `json:"nsec,omitempty"`        // held in memory, never persisted
+	BYOM      *BYOMConfig `json:"byom,omitempty"`        // bring your own machine
+	PPQAPIKey string      `json:"ppq_api_key,omitempty"` // held in memory, never persisted
+	SSHPubKey string      `json:"ssh_pub_key,omitempty"` // user-provided SSH public key
 }
 
 // HandleCreateOrder creates a new deployment order
@@ -93,17 +111,22 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate plan
+	// Validate plan (BYOM skips VPS plan)
+	isBYOM := req.Plan == "byom" && req.BYOM != nil
 	var plan *Plan
-	for i := range plans {
-		if plans[i].ID == req.Plan {
-			plan = &plans[i]
-			break
+	if isBYOM {
+		plan = &Plan{ID: "byom", Name: "Your Machine", SatsMo: 0}
+	} else {
+		for i := range plans {
+			if plans[i].ID == req.Plan {
+				plan = &plans[i]
+				break
+			}
 		}
-	}
-	if plan == nil {
-		httpError(w, "Invalid plan", http.StatusBadRequest)
-		return
+		if plan == nil {
+			httpError(w, "Invalid plan", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Validate model
@@ -122,9 +145,14 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 	// Generate order ID
 	orderID := generateID()
 
-	// Calculate total (VPS + margin + setup fee)
-	vpsSats := int64(float64(plan.SatsMo) * (1 + s.cfg.MarginPercent/100))
-	totalSats := vpsSats + s.cfg.SetupFeeSats
+	// Calculate total (VPS + margin + setup fee; BYOM = setup fee only)
+	var totalSats int64
+	if isBYOM {
+		totalSats = s.cfg.SetupFeeSats
+	} else {
+		vpsSats := int64(float64(plan.SatsMo) * (1 + s.cfg.MarginPercent/100))
+		totalSats = vpsSats + s.cfg.SetupFeeSats
+	}
 
 	order := &Order{
 		ID:         orderID,
@@ -133,6 +161,7 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		Model:      req.Model,
 		Pubkey:     req.Pubkey,
 		AmountSats: totalSats,
+		IsBYOM:     isBYOM,
 	}
 
 	if err := CreateOrder(s.db, order); err != nil {
@@ -141,13 +170,27 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hold nsec in memory for provisioning — NEVER persisted to DB or logs
-	if req.Nsec != "" {
-		s.mu.Lock()
-		s.pendingKeys[orderID] = req.Nsec
-		s.mu.Unlock()
-		log.Printf("Order %s: nsec received for LNVPS provisioning (pubkey: %s...)", orderID, req.Pubkey[:16])
+	// Hold secrets in memory for provisioning — NEVER persisted to DB or logs
+	secrets := &PendingSecrets{
+		Nsec:      req.Nsec,
+		PPQAPIKey: req.PPQAPIKey,
+		SSHPubKey: req.SSHPubKey,
+		BYOM:      req.BYOM,
 	}
+	s.mu.Lock()
+	s.pending[orderID] = secrets
+	s.mu.Unlock()
+
+	mode := "lnvps"
+	if req.BYOM != nil {
+		mode = "byom:" + req.BYOM.Host
+	}
+	pubPrefix := req.Pubkey
+	if len(pubPrefix) > 16 {
+		pubPrefix = pubPrefix[:16]
+	}
+	log.Printf("Order %s: mode=%s, pubkey=%s..., has_nsec=%v, has_ppq=%v, has_ssh=%v",
+		orderID, mode, pubPrefix, req.Nsec != "", req.PPQAPIKey != "", req.SSHPubKey != "")
 
 	// TODO: Generate Lightning invoice for setup fee
 	// TODO: Return invoice in response

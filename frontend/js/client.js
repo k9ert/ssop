@@ -104,14 +104,31 @@ export async function fetchModels() {
 
 /**
  * Create an order on the orchestrator.
- * Sends nsec for LNVPS provisioning (orchestrator uses it for NIP-98 auth,
- * does not persist it).
- * Returns order details or mock response.
+ * Sends all injectable keys for provisioning.
+ *
+ * @param {string} pubkey — Nostr public key (hex)
+ * @param {string} planId — VPS plan ID or 'byom'
+ * @param {string} modelId — model ID
+ * @param {string} nsec — Nostr private key (for LNVPS NIP-98 auth)
+ * @param {object} extras — optional overrides:
+ *   - byom: { host, user, port } — bring your own machine
+ *   - ppqApiKey: string — user's own ppq.ai key
+ *   - sshPubKey: string — user's own SSH public key
  */
-export async function createOrder(pubkey, planId, modelId, nsec) {
+export async function createOrder(pubkey, planId, modelId, nsec, extras = {}) {
+  const body = {
+    pubkey,
+    plan: planId,
+    model: modelId,
+    nsec,
+  };
+  if (extras.byom) body.byom = extras.byom;
+  if (extras.ppqApiKey) body.ppq_api_key = extras.ppqApiKey;
+  if (extras.sshPubKey) body.ssh_pub_key = extras.sshPubKey;
+
   const data = await apiFetch('/api/order', {
     method: 'POST',
-    body: JSON.stringify({ pubkey, plan: planId, model: modelId, nsec }),
+    body: JSON.stringify(body),
   });
 
   if (data) return data;
@@ -120,7 +137,7 @@ export async function createOrder(pubkey, planId, modelId, nsec) {
   return {
     order_id: 'mock-' + Math.random().toString(36).slice(2, 10),
     state: 'pending_setup',
-    amount_sats: 5000,
+    amount_sats: planId === 'byom' ? 100 : 5000,
     mock: true,
   };
 }

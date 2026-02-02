@@ -28,6 +28,7 @@ type Order struct {
 	VMIP      string `json:"vm_ip,omitempty"`
 	SSHAccess string `json:"ssh_access,omitempty"`
 	ErrorMsg  string `json:"error_msg,omitempty"`
+	IsBYOM    bool   `json:"is_byom"`           // true if user provided their own machine
 }
 
 // InitDB creates the SQLite database and tables
