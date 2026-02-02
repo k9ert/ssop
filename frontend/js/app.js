@@ -178,18 +178,31 @@ const PLANS = [
 // ========================================
 function setupFeeStep() {
   $('#btn-pay-setup').addEventListener('click', () => {
-    // TODO: generate real Lightning invoice for 100 sats
-    // For now, simulate payment
+    // TODO: generate real Lightning invoice for 100 sats via orchestrator
     const btn = $('#btn-pay-setup');
     btn.textContent = '⏳ Waiting for payment...';
     btn.disabled = true;
 
-    // Mock: auto-advance after 1s
+    // Show QR for setup fee
+    const mockSetupInvoice = 'lnbc1000n1pnsetupfee00000000000000000000000000000000000000000000000000000000000000000000000000000000000mock';
+    const qrArea = document.getElementById('setup-qr');
+    if (qrArea && typeof QRCode !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      qrArea.innerHTML = '';
+      qrArea.appendChild(canvas);
+      QRCode.toCanvas(canvas, mockSetupInvoice.toUpperCase(), {
+        width: 180, margin: 2,
+        color: { dark: '#000000', light: '#ffffff' },
+      }).catch(() => {});
+      qrArea.classList.remove('hidden');
+    }
+
+    // Mock: auto-advance after 2s (will be real payment detection)
     setTimeout(() => {
       btn.textContent = '✅ Paid!';
       btn.classList.add('btn-success');
       setTimeout(() => showStep('step-plan'), 500);
-    }, 1000);
+    }, 2000);
   });
 }
 
@@ -346,10 +359,23 @@ function renderPaymentSummary() {
   $('#payment-breakdown').textContent =
     `${state.selectedPlan.name} VPS (${vpsSats.toLocaleString()}) + ${state.selectedModel.name} credits (${cost.sats.toLocaleString()})`;
 
-  // Mock invoice
-  const mockInvoice = 'lnbc' + totalSats + 'n1pn...mock_invoice...';
+  // Mock invoice (will be real when orchestrator is live)
+  const mockInvoice = 'lnbc' + totalSats + 'n1pn9qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqmock';
   $('#invoice-text').textContent = mockInvoice;
-  $('#qr-code').textContent = `[ ${totalSats.toLocaleString()} sats ]`;
+
+  // Generate QR code
+  const qrCanvas = document.createElement('canvas');
+  $('#qr-code').innerHTML = '';
+  $('#qr-code').appendChild(qrCanvas);
+  if (typeof QRCode !== 'undefined') {
+    QRCode.toCanvas(qrCanvas, mockInvoice.toUpperCase(), {
+      width: 200,
+      margin: 2,
+      color: { dark: '#000000', light: '#ffffff' },
+    }).catch(() => {
+      $('#qr-code').textContent = '[ QR generation failed ]';
+    });
+  }
 
   $('#btn-copy-invoice').addEventListener('click', async () => {
     await navigator.clipboard.writeText(mockInvoice);
