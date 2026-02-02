@@ -50,7 +50,7 @@ const MODELS = [
     name: 'Claude Opus 4.5',
     provider: 'Anthropic',
     description: 'Most capable. Deep reasoning, nuanced writing, complex tasks.',
-    inputPer1M: 5.0,    // $/1M tokens
+    inputPer1M: 5.0,
     outputPer1M: 25.0,
     context: '200K',
     badge: 'Max Quality',
@@ -66,6 +66,28 @@ const MODELS = [
     context: '200K',
     badge: 'Recommended',
     badgeClass: 'badge-recommended',
+  },
+  {
+    id: 'moonshotai-kimi-k2',
+    name: 'Kimi K2 Instruct',
+    provider: 'Moonshot AI',
+    description: 'Best for agentic tasks. Handles 200-300 consecutive tool calls without degrading. OpenAI-compatible.',
+    inputPer1M: 0.39,
+    outputPer1M: 1.90,
+    context: '256K',
+    badge: 'Best Agentic',
+    badgeClass: 'badge-agentic',
+  },
+  {
+    id: 'qwen3-30b-a3b',
+    name: 'Qwen3-30B-A3B',
+    provider: 'Alibaba',
+    description: 'MoE architecture — only 3B active params. Blazing fast, dirt cheap. Strong at coding. Apache 2.0 open source.',
+    inputPer1M: 0.08,
+    outputPer1M: 0.33,
+    context: '262K',
+    badge: 'Cheapest',
+    badgeClass: 'badge-cheap',
   },
 ];
 
