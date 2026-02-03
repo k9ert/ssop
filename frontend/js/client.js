@@ -126,6 +126,7 @@ export async function createOrder(pubkey, planId, modelId, nsec, extras = {}) {
   if (extras.byom) body.byom = extras.byom;
   if (extras.ppqApiKey) body.ppq_api_key = extras.ppqApiKey;
   if (extras.sshPubKey) body.ssh_pub_key = extras.sshPubKey;
+  if (extras.ownerNpub) body.owner_npub = extras.ownerNpub;
 
   const data = await apiFetch('/api/order', {
     method: 'POST',

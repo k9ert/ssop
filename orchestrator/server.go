@@ -18,6 +18,7 @@ type PendingSecrets struct {
 	PPQAPIKey string      // ppq.ai API key (user's own, or empty for shared)
 	SSHPubKey string      // user-provided SSH public key
 	BYOM      *BYOMConfig // bring your own machine
+	OwnerNpub string      // owner's npub for DM allowlist auto-pairing
 }
 
 // Server holds the application state
@@ -99,13 +100,14 @@ type BYOMConfig struct {
 // CreateOrderRequest is the request body for creating an order
 type CreateOrderRequest struct {
 	Pubkey    string      `json:"pubkey"`
-	Npub      string      `json:"npub,omitempty"`        // bech32 npub for bootstrap config
+	Npub      string      `json:"npub,omitempty"`         // bech32 npub for bootstrap config
 	Plan      string      `json:"plan"`
 	Model     string      `json:"model"`
-	Nsec      string      `json:"nsec,omitempty"`        // held in memory, never persisted
-	BYOM      *BYOMConfig `json:"byom,omitempty"`        // bring your own machine
-	PPQAPIKey string      `json:"ppq_api_key,omitempty"` // held in memory, never persisted
-	SSHPubKey string      `json:"ssh_pub_key,omitempty"` // user-provided SSH public key
+	Nsec      string      `json:"nsec,omitempty"`         // held in memory, never persisted
+	BYOM      *BYOMConfig `json:"byom,omitempty"`         // bring your own machine
+	PPQAPIKey string      `json:"ppq_api_key,omitempty"`  // held in memory, never persisted
+	SSHPubKey string      `json:"ssh_pub_key,omitempty"`  // user-provided SSH public key
+	OwnerNpub string      `json:"owner_npub,omitempty"`   // owner's npub for DM allowlist
 }
 
 // HandleCreateOrder creates a new deployment order
@@ -182,6 +184,7 @@ func (s *Server) HandleCreateOrder(w http.ResponseWriter, r *http.Request) {
 		PPQAPIKey: req.PPQAPIKey,
 		SSHPubKey: req.SSHPubKey,
 		BYOM:      req.BYOM,
+		OwnerNpub: req.OwnerNpub,
 	}
 	s.mu.Lock()
 	s.pending[orderID] = secrets

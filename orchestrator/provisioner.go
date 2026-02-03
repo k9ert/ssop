@@ -100,6 +100,7 @@ func (s *Server) ProvisionOrder(orderID string) {
 		ModelID:   ppqModelID,
 		PPQAPIKey: ppqKey,
 		AgentName: "Agent",
+		OwnerNpub: secrets.OwnerNpub,
 	}
 
 	// Create temp directory for config
