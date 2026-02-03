@@ -88,6 +88,12 @@
       <h2>4. Agent Identity</h2>
       <p>Your agent needs a Nostr keypair. This key is the agent's identity — it controls the LNVPS account and can receive Lightning payments via <a href="https://npub.cash" target="_blank">npub.cash</a>.</p>
 
+      <div class="field owner-npub-field">
+        <label>Your Nostr npub (owner)</label>
+        <input id="owner-npub-input" type="text" class="input-nsec" placeholder="npub1..." autocomplete="off" spellcheck="false">
+        <p class="hint">Your pubkey will be auto-approved for pairing — chat with your agent via Nostr DMs immediately after deployment.</p>
+      </div>
+
       <div class="identity-tabs">
         <button id="tab-generate" class="btn btn-tab active">Generate New</button>
         <button id="tab-import" class="btn btn-tab">Import Existing</button>

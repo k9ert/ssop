@@ -63,6 +63,7 @@ let state = {
   byom: null,        // { host, user, port } — bring your own machine
   ppqApiKey: null,    // user-provided ppq.ai key
   sshPubKey: null,    // user-provided SSH public key
+  ownerNpub: null,   // owner's npub for auto-pairing
 };
 
 // --- DOM Helpers ---
@@ -358,8 +359,10 @@ async function showKeypairAndContinue() {
   // Collect injectable overrides
   const ppqKey = $('#ppq-key-input')?.value?.trim() || null;
   const sshKey = $('#ssh-key-input')?.value?.trim() || null;
+  const ownerNpub = $('#owner-npub-input')?.value?.trim() || null;
   if (ppqKey) state.ppqApiKey = ppqKey;
   if (sshKey) state.sshPubKey = sshKey;
+  if (ownerNpub) state.ownerNpub = ownerNpub;
 
   // Create order on orchestrator (sends all keys for provisioning)
   const order = await createOrder(
@@ -372,6 +375,7 @@ async function showKeypairAndContinue() {
       byom: state.byom,
       ppqApiKey: state.ppqApiKey,
       sshPubKey: state.sshPubKey,
+      ownerNpub: state.ownerNpub,
     },
   );
   state.orderId = order.order_id;

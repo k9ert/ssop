@@ -695,6 +695,26 @@ footer a:hover { text-decoration: underline; }
   font-size: 0.9em;
 }
 
+/* === Owner npub field === */
+.owner-npub-field {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.owner-npub-field label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.owner-npub-field .hint {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
 /* === Responsive === */
 @media (max-width: 480px) {
   .container { padding: 1rem; }
