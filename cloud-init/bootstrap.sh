@@ -92,6 +92,113 @@ openclaw plugins install @openclaw/nostr 2>&1 | tail -3 || echo "  (may already 
 echo "  Installing nostr-tools dependency..."
 npm install -g nostr-tools 2>&1 | tail -1 || true
 
+# --- 4b2. Hot-patch nostr-bus.ts (openclaw#7448: subscribeMany double-wraps filter array) ---
+NOSTR_BUS="/usr/lib/node_modules/openclaw/extensions/nostr/src/nostr-bus.ts"
+if [ -f "$NOSTR_BUS" ] && grep -q 'pool\.subscribeMany' "$NOSTR_BUS"; then
+  echo "  Patching nostr-bus.ts (subscribeMany → subscribe)..."
+  # Original: pool.subscribeMany(relays, [{ kinds: [4], "#p": [pk], since }], {
+  # Fixed:    pool.subscribe(relays, { kinds: [4], "#p": [pk], since }, {
+  sed -i 's/pool\.subscribeMany(relays, \[\({ kinds: \[4\], "#p": \[pk\], since }\)\], {/pool.subscribe(relays, \1, {/' "$NOSTR_BUS"
+  echo "  Done"
+elif [ -f "$NOSTR_BUS" ]; then
+  echo "  SKIP: nostr-bus.ts already patched or different structure"
+fi
+
+# --- 4c. Hot-patch Nostr plugin (openclaw#7449: handleInboundMessage not a function) ---
+echo "  Applying Nostr DM hot-patch..."
+NOSTR_CHANNEL="/usr/lib/node_modules/openclaw/extensions/nostr/src/channel.ts"
+if [ -f "$NOSTR_CHANNEL" ]; then
+  python3 - "$NOSTR_CHANNEL" << 'HOTPATCH_PY'
+import sys, re
+
+channel_path = sys.argv[1]
+with open(channel_path, 'r') as f:
+    content = f.read()
+
+# Only patch if the broken handleInboundMessage pattern exists or if onMessage is the original
+if 'handleInboundMessage' in content or ('onMessage: async (senderPubkey, text, reply)' in content and 'dispatcherOptions' not in content):
+    # Find onMessage handler boundaries
+    start = content.find('onMessage: async (senderPubkey, text, reply) => {')
+    if start == -1:
+        print("  SKIP: onMessage handler not found")
+        sys.exit(0)
+    
+    # Find the next onError handler (end of onMessage)
+    end = content.find('        onError: (error, context) => {', start + 50)
+    if end == -1:
+        print("  SKIP: onError boundary not found")
+        sys.exit(0)
+
+    new_handler = """onMessage: async (senderPubkey, text, reply) => {
+          ctx.log?.debug(`[${account.accountId}] DM from ${senderPubkey}: ${text.slice(0, 50)}...`);
+          const runtime = getNostrRuntime();
+          const cfg = runtime.config.loadConfig();
+          const nostrCfg = (cfg as any).channels?.nostr ?? {};
+          const dmPolicy = nostrCfg.dmPolicy ?? "pairing";
+          const configAllowFrom = (nostrCfg.allowFrom ?? []).map((e: any) => String(e).trim()).filter(Boolean);
+          let storeAllowFrom: string[] = [];
+          try { storeAllowFrom = await runtime.channel.pairing.readAllowFromStore("nostr"); } catch {}
+          const allAllowed = [...configAllowFrom, ...storeAllowFrom];
+          const hasWildcard = allAllowed.includes("*");
+          const normalizedSender = normalizePubkey(senderPubkey);
+          const isAllowed = dmPolicy === "open" || hasWildcard ||
+            allAllowed.some((a: string) => { try { return normalizePubkey(a) === normalizedSender; } catch { return a === senderPubkey; } });
+          if (!isAllowed) {
+            if (dmPolicy === "pairing") {
+              try {
+                const { code, created } = await runtime.channel.pairing.upsertPairingRequest({ channel: "nostr", id: normalizedSender, meta: { name: normalizedSender.slice(0, 12) + "..." } });
+                if (created) {
+                  ctx.log?.info(`[${account.accountId}] Nostr pairing request from ${normalizedSender}, code=${code}`);
+                  await reply(runtime.channel.pairing.buildPairingReply({ channel: "nostr", idLine: `Your Nostr pubkey: ${normalizedSender}`, code }));
+                }
+              } catch (err: any) { ctx.log?.error(`[${account.accountId}] pairing error: ${err.message}`); }
+            } else { ctx.log?.debug(`[${account.accountId}] blocked ${normalizedSender} (dmPolicy=${dmPolicy})`); }
+            return;
+          }
+          const route = runtime.channel.routing.resolveAgentRoute({ cfg, channel: "nostr", accountId: account.accountId, peer: { kind: "dm" as const, id: normalizedSender } });
+          const ctxPayload = runtime.channel.reply.finalizeInboundContext({
+            Body: text, RawBody: text, CommandBody: text, From: normalizedSender, To: account.publicKey,
+            SessionKey: route.sessionKey, AccountId: route.accountId, MessageSid: `nostr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            ChatType: "direct", ConversationLabel: normalizedSender, SenderName: normalizedSender.slice(0, 12) + "...",
+            SenderId: normalizedSender, CommandAuthorized: true, Provider: "nostr", Surface: "nostr",
+            OriginatingChannel: "nostr", OriginatingTo: normalizedSender, Timestamp: Date.now(),
+          });
+          try {
+            const storePath = runtime.channel.session.resolveStorePath(cfg, route.agentId);
+            await runtime.channel.session.recordSessionMetaFromInbound({ storePath, sessionKey: route.sessionKey, ctx: ctxPayload });
+          } catch (err: any) { ctx.log?.warn(`[${account.accountId}] session meta: ${err.message}`); }
+          try {
+            await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+              ctx: ctxPayload, cfg,
+              dispatcherOptions: {
+                deliver: async (payload: any, _info: any) => { const t = payload?.text?.trim(); if (t) await reply(t); },
+                onReplyStart: undefined, onIdle: undefined,
+                onSkip: (_p: any, info: any) => { ctx.log?.debug(`[${account.accountId}] reply skipped: ${info?.reason}`); },
+                onError: (err: any, info: any) => { ctx.log?.error(`[${account.accountId}] dispatch error (${info?.kind}): ${String(err)}`); },
+              },
+            });
+          } catch (err: any) {
+            ctx.log?.error(`[${account.accountId}] dispatch error: ${err.message}`);
+            try { await reply("I encountered an error processing your message."); } catch {}
+          }
+        },
+        """
+
+    # Remove duplicate onError if present from previous patches
+    content_new = content[:start] + new_handler + content[end:]
+    dup = "        onError: (error, context) => {\\n          ctx.log?.error"
+    with open(channel_path, 'w') as f:
+        f.write(content_new)
+    print("  Hot-patch applied successfully")
+elif 'dispatcherOptions' in content:
+    print("  SKIP: already patched")
+else:
+    print("  SKIP: unrecognized channel.ts structure")
+HOTPATCH_PY
+else
+  echo "  WARN: channel.ts not found, skipping hot-patch"
+fi
+
 # --- 5. Configure OpenClaw ---
 echo "[5/8] Configuring OpenClaw..."
 
