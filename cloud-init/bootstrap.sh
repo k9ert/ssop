@@ -272,6 +272,11 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
       }
     }
   },
+  "skills": {
+    "load": {
+      "extraDirs": ["$WORKSPACE/skills"]
+    }
+  },
   "channels": {
     "nostr": {
       "enabled": true,
