@@ -1,0 +1,41 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-02-04",
+  "skills": [
+    {
+      "id": "lightning",
+      "name": "Lightning Wallet",
+      "description": "Check balance, send/receive payments via Blink or NWC",
+      "version": "0.1.0",
+      "path": "lightning/SKILL.md",
+      "requires": []
+    },
+    {
+      "id": "ppq",
+      "name": "PPQ Usage Monitor",
+      "description": "Track ppq.ai credits and usage, alert when low",
+      "version": "0.1.0",
+      "path": "ppq/SKILL.md",
+      "requires": []
+    },
+    {
+      "id": "lnvps",
+      "name": "LNVPS Manager",
+      "description": "Check VM status, expiry, request renewals",
+      "version": "0.1.0",
+      "path": "lnvps/SKILL.md",
+      "requires": ["lightning"]
+    },
+    {
+      "id": "heartbeat",
+      "name": "Self-Preservation Heartbeat",
+      "description": "Monitor wallet, credits, VM expiry — alert owner when low",
+      "version": "0.1.0",
+      "path": "heartbeat/SKILL.md",
+      "requires": ["lightning", "ppq", "lnvps"]
+    }
+  ],
+  "bundles": {
+    "ssop-core": ["lightning", "ppq", "lnvps", "heartbeat"]
+  }
+}
