@@ -134,7 +134,7 @@ When ready, your agent has:
 
 | ID | CPU | RAM | Disk | sats/mo | ~USD/mo |
 |----|-----|-----|------|---------|---------|
-| `tiny` | 1 | 1 GB | 40 GB SSD | 4,200 | $3.20 |
+| ~~`tiny`~~ | ~~1~~ | ~~1 GB~~ | — | — | — | *(Removed: OpenClaw needs 2GB+)* |
 | `small` | 2 | 2 GB | 80 GB SSD | 8,400 | $6.05 |
 | `medium` | 4 | 4 GB | 160 GB SSD | 16,800 | $11.74 |
 | `large` | 8 | 8 GB | 400 GB SSD | 33,600 | $25.99 |
@@ -149,7 +149,7 @@ When ready, your agent has:
 | `kimi-k2` | Moonshot AI | $0.39 | $1.90 | 256K |
 | `qwen3-30b-a3b` | Alibaba | $0.08 | $0.33 | 262K |
 
-**Cheapest agent:** Tiny + Qwen3-30B-A3B ≈ 4,730 sats/mo (~$4.73)
+**Cheapest agent:** Small + Qwen3-30B-A3B ≈ 8,930 sats/mo (~$6.55)
 
 ---
 

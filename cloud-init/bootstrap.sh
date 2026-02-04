@@ -15,7 +15,9 @@
 
 set -euo pipefail
 
-# --- 0a. Expand partition if needed (LNVPS cloud images ship with small partitions) ---
+# --- 0a. Expand partition if needed ---
+# Workaround for: https://github.com/LNVPS/api/issues/40
+# LNVPS cloud images ship with 2.5GB partition even on 40GB disk plans
 ROOT_DEV=$(findmnt -n -o SOURCE /)
 DISK_DEV=$(lsblk -no PKNAME "$ROOT_DEV" 2>/dev/null | head -1)
 if [ -n "$DISK_DEV" ]; then

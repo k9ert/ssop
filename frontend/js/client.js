@@ -19,8 +19,8 @@ function getConfig() {
 }
 
 // --- Mock Data ---
+// Note: Tiny (1GB) removed — OpenClaw needs 2GB+ to run reliably without swap issues
 const MOCK_PLANS = [
-  { id: 'tiny', name: 'Tiny', cpu: 1, ram: '1 GB', disk: '40 GB SSD', sats_mo: 4200, fiat_mo: '~$3.20' },
   { id: 'small', name: 'Small', cpu: 2, ram: '2 GB', disk: '80 GB SSD', sats_mo: 8400, fiat_mo: '~$6.05' },
   { id: 'medium', name: 'Medium', cpu: 4, ram: '4 GB', disk: '160 GB SSD', sats_mo: 16800, fiat_mo: '~$11.74' },
   { id: 'large', name: 'Large', cpu: 8, ram: '8 GB', disk: '400 GB SSD', sats_mo: 33600, fiat_mo: '~$25.99' },
