@@ -1,12 +1,12 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "updated": "2026-02-04",
   "skills": [
     {
       "id": "lightning",
-      "name": "Lightning Wallet",
-      "description": "Check balance, send/receive payments via Blink or NWC",
-      "version": "0.1.0",
+      "name": "Lightning Wallet (Self-Sovereign)",
+      "description": "Receive via npub.cash (no signup), send via NWC (your wallet)",
+      "version": "0.2.0",
       "path": "lightning/SKILL.md",
       "requires": []
     },
