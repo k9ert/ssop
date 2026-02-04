@@ -89,13 +89,18 @@ echo "[4/9] Installing Nostr channel plugin..."
 openclaw plugins install @openclaw/nostr 2>&1 | tail -3 || echo "  (may already be installed)"
 
 # --- 4b. Install nostr-tools globally (required by the Nostr plugin at runtime) ---
-echo "  Installing nostr-tools dependency..."
+# Workaround for: https://github.com/openclaw/openclaw/issues/8670
+# The @openclaw/nostr plugin requires nostr-tools but doesn't declare it as a dependency
+echo "  Installing nostr-tools dependency (openclaw#8670 workaround)..."
 npm install -g nostr-tools 2>&1 | tail -1 || true
 
-# --- 4b2. Hot-patch nostr-bus.ts (openclaw#7448: subscribeMany double-wraps filter array) ---
+# --- 4b2. Hot-patch nostr-bus.ts: subscribeMany double-wraps filter array ---
+# Workaround for: https://github.com/openclaw/openclaw/issues/7448
+# The plugin calls pool.subscribeMany(relays, [filter], ...) but subscribeMany already wraps,
+# resulting in [[filter]] which relays reject with 'bad req'
 NOSTR_BUS="/usr/lib/node_modules/openclaw/extensions/nostr/src/nostr-bus.ts"
 if [ -f "$NOSTR_BUS" ] && grep -q 'pool\.subscribeMany' "$NOSTR_BUS"; then
-  echo "  Patching nostr-bus.ts (subscribeMany → subscribe)..."
+  echo "  Patching nostr-bus.ts (openclaw#7448: subscribeMany → subscribe)..."
   # Original: pool.subscribeMany(relays, [{ kinds: [4], "#p": [pk], since }], {
   # Fixed:    pool.subscribe(relays, { kinds: [4], "#p": [pk], since }, {
   sed -i 's/pool\.subscribeMany(relays, \[\({ kinds: \[4\], "#p": \[pk\], since }\)\], {/pool.subscribe(relays, \1, {/' "$NOSTR_BUS"
@@ -104,8 +109,13 @@ elif [ -f "$NOSTR_BUS" ]; then
   echo "  SKIP: nostr-bus.ts already patched or different structure"
 fi
 
-# --- 4c. Hot-patch Nostr plugin (openclaw#7449: handleInboundMessage not a function) ---
-echo "  Applying Nostr DM hot-patch..."
+# --- 4c. Hot-patch Nostr plugin: handleInboundMessage not a function ---
+# Workaround for: https://github.com/openclaw/openclaw/issues/7449
+# Also related: https://github.com/openclaw/openclaw/issues/4547
+# The plugin calls runtime.channel.reply.handleInboundMessage() which doesn't exist.
+# This patch replaces the broken onMessage handler with a working implementation using
+# dispatchReplyWithBufferedBlockDispatcher (the correct internal API).
+echo "  Applying Nostr DM hot-patch (openclaw#7449 workaround)..."
 NOSTR_CHANNEL="/usr/lib/node_modules/openclaw/extensions/nostr/src/channel.ts"
 if [ -f "$NOSTR_CHANNEL" ]; then
   python3 - "$NOSTR_CHANNEL" << 'HOTPATCH_PY'
@@ -199,8 +209,12 @@ else
   echo "  WARN: channel.ts not found, skipping hot-patch"
 fi
 
-# --- 4d. Fix normalizePubkey for nostr-tools 2.23+ (openclaw#8570) ---
-echo "  Fixing normalizePubkey for nostr-tools 2.23+..."
+# --- 4d. Fix normalizePubkey for nostr-tools 2.23+ ---
+# Workaround for: https://github.com/openclaw/openclaw/issues/8570
+# In nostr-tools 2.23+, nip19.decode().data returns a hex string, not Uint8Array.
+# The plugin's normalizePubkey() assumes Uint8Array and produces garbage hex,
+# breaking allowFrom matching (owners can't talk to their own agents).
+echo "  Fixing normalizePubkey (openclaw#8570 workaround)..."
 NOSTR_BUS="/usr/lib/node_modules/openclaw/extensions/nostr/src/nostr-bus.ts"
 if [ -f "$NOSTR_BUS" ]; then
   if grep -q 'typeof decoded.data === "string"' "$NOSTR_BUS"; then
