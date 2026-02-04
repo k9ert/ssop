@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# SSOP Agent Bootstrap Script
-# Provisions a fresh Ubuntu 24.04 VM with OpenClaw + ppq.ai + Nostr DM channel.
+# SSOP Agent Bootstrap Script (non-root)
+# Provisions a VM with OpenClaw + ppq.ai + Nostr DM channel.
+# Does NOT require root — uses local npm install and user systemd.
+#
+# Prerequisites (must be installed by cloud-init or manually):
+#   - Node.js 22+
+#   - python3 (for config parsing and hot-patches)
 #
 # Usage: bash bootstrap.sh <config.json>
 #   config.json fields:
@@ -15,36 +20,32 @@
 
 set -euo pipefail
 
-# --- 0a. Expand partition if needed ---
-# Workaround for: https://github.com/LNVPS/api/issues/40
-# LNVPS cloud images ship with 2.5GB partition even on 40GB disk plans
-ROOT_DEV=$(findmnt -n -o SOURCE /)
-DISK_DEV=$(lsblk -no PKNAME "$ROOT_DEV" 2>/dev/null | head -1)
-if [ -n "$DISK_DEV" ]; then
-  PART_NUM=$(echo "$ROOT_DEV" | grep -o '[0-9]*$')
-  if command -v growpart &>/dev/null; then
-    growpart "/dev/$DISK_DEV" "$PART_NUM" 2>/dev/null && resize2fs "$ROOT_DEV" 2>/dev/null && echo "[0a] Expanded partition $ROOT_DEV" || true
-  else
-    apt-get update -qq && apt-get install -y -qq cloud-guest-utils > /dev/null 2>&1
-    growpart "/dev/$DISK_DEV" "$PART_NUM" 2>/dev/null && resize2fs "$ROOT_DEV" 2>/dev/null && echo "[0a] Expanded partition $ROOT_DEV" || true
-  fi
-fi
-
-# --- 0b. Swap for low-memory machines ---
-TOTAL_MEM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
-if [ "$TOTAL_MEM_MB" -lt 2048 ] && [ ! -f /swapfile ]; then
-  echo "[0b] Low memory (${TOTAL_MEM_MB}MB) — creating 2GB swap..."
-  fallocate -l 2G /swapfile
-  chmod 600 /swapfile
-  mkswap /swapfile > /dev/null
-  swapon /swapfile
-  echo "/swapfile none swap sw 0 0" >> /etc/fstab
-fi
+# --- Paths (all user-local, no root needed) ---
+INSTALL_DIR="$HOME/openclaw"
+WORKSPACE="$HOME/agent"
+OPENCLAW_DIR="$HOME/.openclaw"
+ENV_FILE="$HOME/.openclaw/env"
+SYSTEMD_DIR="$HOME/.config/systemd/user"
+NODE_MODULES="$INSTALL_DIR/node_modules"
 
 CONFIG_FILE="${1:-/tmp/ssop-config.json}"
 
 if [ ! -f "$CONFIG_FILE" ]; then
   echo "ERROR: Config file not found: $CONFIG_FILE"
+  exit 1
+fi
+
+# Check Node.js
+if ! command -v node &>/dev/null; then
+  echo "ERROR: Node.js not found. Install Node.js 22+ first."
+  echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -"
+  echo "  sudo apt-get install -y nodejs"
+  exit 1
+fi
+
+NODE_VERSION=$(node -v | cut -d. -f1 | tr -d 'v')
+if [ "$NODE_VERSION" -lt 22 ]; then
+  echo "ERROR: Node.js 22+ required, found $(node -v)"
   exit 1
 fi
 
@@ -56,86 +57,86 @@ PPQ_API_KEY=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['pp
 AGENT_NAME=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('agent_name', 'Agent'))")
 OWNER_NPUB=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('owner_npub', ''))")
 
-echo "=== SSOP Bootstrap ==="
+echo "=== SSOP Bootstrap (non-root) ==="
 echo "Agent: $AGENT_NAME"
 echo "npub:  $NPUB"
 echo "Model: $MODEL_ID"
 echo ""
 
-# --- 1. System packages ---
-echo "[1/9] Updating system packages..."
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq curl git jq sqlite3 > /dev/null 2>&1
+# --- 1. Create directories ---
+echo "[1/8] Creating directories..."
+mkdir -p "$INSTALL_DIR" "$WORKSPACE" "$WORKSPACE/memory" "$OPENCLAW_DIR" "$SYSTEMD_DIR"
 
-# --- 2. Node.js 22 ---
-if command -v node &>/dev/null && [[ "$(node -v)" == v22* ]]; then
-  echo "[2/9] Node.js 22 already installed: $(node -v)"
+# --- 2. Install OpenClaw locally ---
+echo "[2/8] Installing OpenClaw (local)..."
+cd "$INSTALL_DIR"
+if [ -f "$NODE_MODULES/.bin/openclaw" ]; then
+  echo "  OpenClaw already installed"
 else
-  echo "[2/9] Installing Node.js 22..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
-  apt-get install -y -qq nodejs > /dev/null 2>&1
-  echo "  Installed: $(node -v)"
+  npm install openclaw@latest 2>&1 | tail -5
 fi
 
-# --- 3. OpenClaw ---
-if command -v openclaw &>/dev/null; then
-  echo "[3/9] OpenClaw already installed: $(openclaw --version 2>/dev/null || echo 'unknown')"
-else
-  echo "[3/9] Installing OpenClaw..."
-  npm install -g openclaw@latest 2>&1 | tail -3
-fi
+# Add to PATH for this session
+export PATH="$NODE_MODULES/.bin:$PATH"
 
-# --- 4a. Install Nostr plugin ---
-echo "[4/9] Installing Nostr channel plugin..."
+# --- 3. Install Nostr plugin ---
+echo "[3/8] Installing Nostr channel plugin..."
 openclaw plugins install @openclaw/nostr 2>&1 | tail -3 || echo "  (may already be installed)"
 
-# --- 4b. Install nostr-tools globally (required by the Nostr plugin at runtime) ---
+# --- 3b. Install nostr-tools (local) ---
 # Workaround for: https://github.com/openclaw/openclaw/issues/8670
 # The @openclaw/nostr plugin requires nostr-tools but doesn't declare it as a dependency
 echo "  Installing nostr-tools dependency (openclaw#8670 workaround)..."
-npm install -g nostr-tools 2>&1 | tail -1 || true
+cd "$INSTALL_DIR" && npm install nostr-tools 2>&1 | tail -1 || true
 
-# --- 4b2. Hot-patch nostr-bus.ts: subscribeMany double-wraps filter array ---
-# Workaround for: https://github.com/openclaw/openclaw/issues/7448
-# The plugin calls pool.subscribeMany(relays, [filter], ...) but subscribeMany already wraps,
-# resulting in [[filter]] which relays reject with 'bad req'
-NOSTR_BUS="/usr/lib/node_modules/openclaw/extensions/nostr/src/nostr-bus.ts"
-if [ -f "$NOSTR_BUS" ] && grep -q 'pool\.subscribeMany' "$NOSTR_BUS"; then
-  echo "  Patching nostr-bus.ts (openclaw#7448: subscribeMany → subscribe)..."
-  # Original: pool.subscribeMany(relays, [{ kinds: [4], "#p": [pk], since }], {
-  # Fixed:    pool.subscribe(relays, { kinds: [4], "#p": [pk], since }, {
-  sed -i 's/pool\.subscribeMany(relays, \[\({ kinds: \[4\], "#p": \[pk\], since }\)\], {/pool.subscribe(relays, \1, {/' "$NOSTR_BUS"
-  echo "  Done"
-elif [ -f "$NOSTR_BUS" ]; then
-  echo "  SKIP: nostr-bus.ts already patched or different structure"
-fi
+# --- 4. Apply hot-patches ---
+echo "[4/8] Applying Nostr plugin hot-patches..."
 
-# --- 4c. Hot-patch Nostr plugin: handleInboundMessage not a function ---
-# Workaround for: https://github.com/openclaw/openclaw/issues/7449
-# Also related: https://github.com/openclaw/openclaw/issues/4547
-# The plugin calls runtime.channel.reply.handleInboundMessage() which doesn't exist.
-# This patch replaces the broken onMessage handler with a working implementation using
-# dispatchReplyWithBufferedBlockDispatcher (the correct internal API).
-echo "  Applying Nostr DM hot-patch (openclaw#7449 workaround)..."
-NOSTR_CHANNEL="/usr/lib/node_modules/openclaw/extensions/nostr/src/channel.ts"
-if [ -f "$NOSTR_CHANNEL" ]; then
-  python3 - "$NOSTR_CHANNEL" << 'HOTPATCH_PY'
-import sys, re
+# Find where openclaw installed the nostr extension
+# Could be in node_modules/openclaw/extensions or a separate extensions dir
+NOSTR_EXT=""
+for candidate in \
+  "$NODE_MODULES/openclaw/extensions/nostr/src" \
+  "$NODE_MODULES/@openclaw/nostr/src" \
+  "$HOME/.openclaw/extensions/nostr/src"; do
+  if [ -d "$candidate" ]; then
+    NOSTR_EXT="$candidate"
+    break
+  fi
+done
+
+if [ -z "$NOSTR_EXT" ]; then
+  echo "  WARN: Nostr extension not found, skipping hot-patches"
+else
+  echo "  Found Nostr extension at: $NOSTR_EXT"
+  
+  # --- 4a. Hot-patch: subscribeMany double-wraps filter array ---
+  # Workaround for: https://github.com/openclaw/openclaw/issues/7448
+  NOSTR_BUS="$NOSTR_EXT/nostr-bus.ts"
+  if [ -f "$NOSTR_BUS" ] && grep -q 'pool\.subscribeMany' "$NOSTR_BUS"; then
+    echo "  Patching nostr-bus.ts (openclaw#7448: subscribeMany → subscribe)..."
+    sed -i 's/pool\.subscribeMany(relays, \[\({ kinds: \[4\], "#p": \[pk\], since }\)\], {/pool.subscribe(relays, \1, {/' "$NOSTR_BUS"
+  elif [ -f "$NOSTR_BUS" ]; then
+    echo "  SKIP: nostr-bus.ts already patched or different structure"
+  fi
+
+  # --- 4b. Hot-patch: handleInboundMessage not a function ---
+  # Workaround for: https://github.com/openclaw/openclaw/issues/7449
+  # Also: https://github.com/openclaw/openclaw/issues/4547
+  NOSTR_CHANNEL="$NOSTR_EXT/channel.ts"
+  if [ -f "$NOSTR_CHANNEL" ]; then
+    python3 - "$NOSTR_CHANNEL" << 'HOTPATCH_PY'
+import sys
 
 channel_path = sys.argv[1]
 with open(channel_path, 'r') as f:
     content = f.read()
 
-# Only patch if the broken handleInboundMessage pattern exists or if onMessage is the original
 if 'handleInboundMessage' in content or ('onMessage: async (senderPubkey, text, reply)' in content and 'dispatcherOptions' not in content):
-    # Find onMessage handler boundaries
     start = content.find('onMessage: async (senderPubkey, text, reply) => {')
     if start == -1:
         print("  SKIP: onMessage handler not found")
         sys.exit(0)
-    
-    # Find the next onError handler (end of onMessage)
     end = content.find('        onError: (error, context) => {', start + 50)
     if end == -1:
         print("  SKIP: onError boundary not found")
@@ -195,68 +196,48 @@ if 'handleInboundMessage' in content or ('onMessage: async (senderPubkey, text, 
           }
         },
         """
-
-    # Remove duplicate onError if present from previous patches
-    content_new = content[:start] + new_handler + content[end:]
-    dup = "        onError: (error, context) => {\\n          ctx.log?.error"
     with open(channel_path, 'w') as f:
-        f.write(content_new)
-    print("  Hot-patch applied successfully")
+        f.write(content[:start] + new_handler + content[end:])
+    print("  Hot-patch applied (openclaw#7449)")
 elif 'dispatcherOptions' in content:
     print("  SKIP: already patched")
 else:
     print("  SKIP: unrecognized channel.ts structure")
 HOTPATCH_PY
-else
-  echo "  WARN: channel.ts not found, skipping hot-patch"
-fi
-
-# --- 4d. Fix normalizePubkey for nostr-tools 2.23+ ---
-# Workaround for: https://github.com/openclaw/openclaw/issues/8570
-# In nostr-tools 2.23+, nip19.decode().data returns a hex string, not Uint8Array.
-# The plugin's normalizePubkey() assumes Uint8Array and produces garbage hex,
-# breaking allowFrom matching (owners can't talk to their own agents).
-echo "  Fixing normalizePubkey (openclaw#8570 workaround)..."
-NOSTR_BUS="/usr/lib/node_modules/openclaw/extensions/nostr/src/nostr-bus.ts"
-if [ -f "$NOSTR_BUS" ]; then
-  if grep -q 'typeof decoded.data === "string"' "$NOSTR_BUS"; then
-    echo "  SKIP: normalizePubkey already fixed"
-  else
-    # In nostr-tools 2.23+, nip19.decode().data returns string (hex) not Uint8Array
-    # Add type check to handle both cases
-    sed -i 's|// Convert Uint8Array to hex string|// Handle both string (nostr-tools 2.23+) and Uint8Array (older) return types\n    if (typeof decoded.data === "string") {\n      return decoded.data.toLowerCase();\n    }\n    // Convert Uint8Array to hex string (legacy)|' "$NOSTR_BUS"
-    echo "  normalizePubkey patched"
   fi
-else
-  echo "  WARN: nostr-bus.ts not found"
+
+  # --- 4c. Hot-patch: normalizePubkey for nostr-tools 2.23+ ---
+  # Workaround for: https://github.com/openclaw/openclaw/issues/8570
+  if [ -f "$NOSTR_BUS" ]; then
+    if grep -q 'typeof decoded.data === "string"' "$NOSTR_BUS"; then
+      echo "  SKIP: normalizePubkey already fixed"
+    else
+      sed -i 's|// Convert Uint8Array to hex string|// Handle both string (nostr-tools 2.23+) and Uint8Array (older)\n    if (typeof decoded.data === "string") {\n      return decoded.data.toLowerCase();\n    }\n    // Convert Uint8Array to hex string (legacy)|' "$NOSTR_BUS"
+      echo "  Patched normalizePubkey (openclaw#8570)"
+    fi
+  fi
 fi
 
 # --- 5. Configure OpenClaw ---
-echo "[5/9] Configuring OpenClaw..."
+echo "[5/8] Configuring OpenClaw..."
 
-OPENCLAW_DIR="/root/.openclaw"
-WORKSPACE="/root/agent"
-ENV_FILE="/root/.openclaw/env"
-mkdir -p "$OPENCLAW_DIR" "$WORKSPACE" "$WORKSPACE/memory"
-
-# Environment file for systemd (KEY=VALUE format, no export, no quotes)
-# Limit Node.js heap on low-memory machines to prevent OOM
-# 768MB heap works with 2GB swap on 1GB machines; 384 was too small
+# Environment file
+TOTAL_MEM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
 NODE_OPTS="--dns-result-order=ipv4first"
 if [ "$TOTAL_MEM_MB" -lt 2048 ]; then
   NODE_OPTS="$NODE_OPTS --max-old-space-size=768"
 fi
 
-# Generate a random gateway auth token
 GW_TOKEN=$(openssl rand -hex 24)
 cat > "$ENV_FILE" << EOFENV
 NOSTR_PRIVATE_KEY=$NSEC
 PPQ_API_KEY=$PPQ_API_KEY
 NODE_OPTIONS=$NODE_OPTS
+PATH=$NODE_MODULES/.bin:\$PATH
 EOFENV
 chmod 600 "$ENV_FILE"
 
-# Build allowFrom array for Nostr DM policy
+# Build allowFrom array
 ALLOW_FROM="[]"
 if [ -n "$OWNER_NPUB" ]; then
   ALLOW_FROM="[\"$OWNER_NPUB\"]"
@@ -322,7 +303,7 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
 }
 EOFCONFIG
 
-# Write workspace identity files
+# Workspace identity files
 cat > "$WORKSPACE/SOUL.md" << 'EOFSOUL'
 # SOUL.md — Who You Are
 
@@ -357,51 +338,50 @@ EOFAGENTS
 cat > "$WORKSPACE/MEMORY.md" << EOFMEMORY
 # MEMORY.md
 
-Born on $(date -u +%Y-%m-%d) via SSOP. Running on LNVPS.
+Born on $(date -u +%Y-%m-%d) via SSOP.
 Model: $MODEL_ID
 Owner: ${OWNER_NPUB:-unknown}
 EOFMEMORY
 
-# --- 6. Systemd service ---
-echo "[6/9] Setting up systemd service..."
+# --- 6. User systemd service ---
+echo "[6/8] Setting up user systemd service..."
 
-cat > /etc/systemd/system/openclaw-gateway.service << EOFSVC
+cat > "$SYSTEMD_DIR/openclaw-gateway.service" << EOFSVC
 [Unit]
 Description=OpenClaw Gateway
 After=network.target
 
 [Service]
 Type=simple
-User=root
 WorkingDirectory=$WORKSPACE
-ExecStart=/usr/bin/openclaw gateway
+ExecStart=$NODE_MODULES/.bin/openclaw gateway
 Restart=always
 RestartSec=10
 EnvironmentFile=$ENV_FILE
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOFSVC
 
-systemctl daemon-reload
-systemctl enable openclaw-gateway
-
-# --- 7. Install SSOP skills ---
-echo "[7/9] Installing SSOP skills..."
-cd "$WORKSPACE"
-mkdir -p skills scripts
-if curl -sfL https://ssop.pages.dev/install.sh -o /tmp/ssop-install.sh; then
-  bash /tmp/ssop-install.sh 2>&1 | tail -5
-else
-  echo "  WARN: Could not fetch SSOP skill installer"
+# Enable lingering so user services run without login
+if command -v loginctl &>/dev/null; then
+  loginctl enable-linger "$(whoami)" 2>/dev/null || true
 fi
 
-# --- 8. Start ---
-echo "[8/9] Starting OpenClaw gateway..."
-systemctl restart openclaw-gateway
+systemctl --user daemon-reload
+systemctl --user enable openclaw-gateway
 
-# --- 9. Wait for health ---
-echo "[9/9] Waiting for gateway to become healthy..."
+# --- 7. Install SSOP skills ---
+echo "[7/8] Installing SSOP skills..."
+cd "$WORKSPACE"
+mkdir -p skills scripts
+
+# --- 8. Start ---
+echo "[8/8] Starting OpenClaw gateway..."
+systemctl --user restart openclaw-gateway
+
+# Wait for health
+echo "Waiting for gateway to become healthy..."
 for i in $(seq 1 30); do
   if curl -sf http://127.0.0.1:18789/health > /dev/null 2>&1; then
     echo ""
@@ -416,7 +396,6 @@ for i in $(seq 1 30); do
     echo "Workspace: $WORKSPACE"
     echo "Gateway:   http://127.0.0.1:18789"
     echo "GW Token:  $GW_TOKEN"
-    echo "DM policy: pairing (owner auto-allowed)"
     echo ""
     echo "Send a Nostr DM to $NPUB to talk to your agent!"
     exit 0
@@ -424,5 +403,5 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-echo "⚠️  Gateway not healthy after 60s. Check: journalctl -u openclaw-gateway"
+echo "⚠️  Gateway not healthy after 60s. Check: journalctl --user -u openclaw-gateway"
 exit 1
