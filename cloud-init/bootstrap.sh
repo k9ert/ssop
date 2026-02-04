@@ -61,16 +61,16 @@ echo "Model: $MODEL_ID"
 echo ""
 
 # --- 1. System packages ---
-echo "[1/7] Updating system packages..."
+echo "[1/9] Updating system packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq curl git jq sqlite3 > /dev/null 2>&1
 
 # --- 2. Node.js 22 ---
 if command -v node &>/dev/null && [[ "$(node -v)" == v22* ]]; then
-  echo "[2/7] Node.js 22 already installed: $(node -v)"
+  echo "[2/9] Node.js 22 already installed: $(node -v)"
 else
-  echo "[2/7] Installing Node.js 22..."
+  echo "[2/9] Installing Node.js 22..."
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
   apt-get install -y -qq nodejs > /dev/null 2>&1
   echo "  Installed: $(node -v)"
@@ -78,14 +78,14 @@ fi
 
 # --- 3. OpenClaw ---
 if command -v openclaw &>/dev/null; then
-  echo "[3/7] OpenClaw already installed: $(openclaw --version 2>/dev/null || echo 'unknown')"
+  echo "[3/9] OpenClaw already installed: $(openclaw --version 2>/dev/null || echo 'unknown')"
 else
-  echo "[3/7] Installing OpenClaw..."
+  echo "[3/9] Installing OpenClaw..."
   npm install -g openclaw@latest 2>&1 | tail -3
 fi
 
 # --- 4a. Install Nostr plugin ---
-echo "[4/8] Installing Nostr channel plugin..."
+echo "[4/9] Installing Nostr channel plugin..."
 openclaw plugins install @openclaw/nostr 2>&1 | tail -3 || echo "  (may already be installed)"
 
 # --- 4b. Install nostr-tools globally (required by the Nostr plugin at runtime) ---
@@ -216,7 +216,7 @@ else
 fi
 
 # --- 5. Configure OpenClaw ---
-echo "[5/8] Configuring OpenClaw..."
+echo "[5/9] Configuring OpenClaw..."
 
 OPENCLAW_DIR="/root/.openclaw"
 WORKSPACE="/root/agent"
@@ -267,8 +267,7 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
         "models": [
           { "id": "claude-opus-4.5", "name": "Claude Opus 4.5" },
           { "id": "anthropic/claude-3.7-sonnet", "name": "Claude 3.7 Sonnet" },
-          { "id": "moonshotai/kimi-k2-0905", "name": "Kimi K2" },
-          { "id": "qwen/qwen3-30b-a3b-instruct-2507", "name": "Qwen3-30B-A3B" }
+          { "id": "moonshotai/kimi-k2-0905", "name": "Kimi K2" }
         ]
       }
     }
@@ -343,7 +342,7 @@ Owner: ${OWNER_NPUB:-unknown}
 EOFMEMORY
 
 # --- 6. Systemd service ---
-echo "[6/8] Setting up systemd service..."
+echo "[6/9] Setting up systemd service..."
 
 cat > /etc/systemd/system/openclaw-gateway.service << EOFSVC
 [Unit]
@@ -366,12 +365,22 @@ EOFSVC
 systemctl daemon-reload
 systemctl enable openclaw-gateway
 
-# --- 7. Start ---
-echo "[7/8] Starting OpenClaw gateway..."
+# --- 7. Install SSOP skills ---
+echo "[7/9] Installing SSOP skills..."
+cd "$WORKSPACE"
+mkdir -p skills scripts
+if curl -sfL https://ssop.pages.dev/install.sh -o /tmp/ssop-install.sh; then
+  bash /tmp/ssop-install.sh 2>&1 | tail -5
+else
+  echo "  WARN: Could not fetch SSOP skill installer"
+fi
+
+# --- 8. Start ---
+echo "[8/9] Starting OpenClaw gateway..."
 systemctl restart openclaw-gateway
 
-# Wait for health
-echo "Waiting for gateway to become healthy..."
+# --- 9. Wait for health ---
+echo "[9/9] Waiting for gateway to become healthy..."
 for i in $(seq 1 30); do
   if curl -sf http://127.0.0.1:18789/health > /dev/null 2>&1; then
     echo ""
