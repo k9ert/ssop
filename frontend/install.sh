@@ -57,29 +57,37 @@ done
 echo ""
 echo "📜 Extracting scripts from skills..."
 
-# Extract embedded scripts from SKILL.md files
-for skill in $SKILLS; do
-    SKILL_FILE="$SKILLS_DIR/$skill/SKILL.md"
-    if [ -f "$SKILL_FILE" ]; then
-        # Extract Python scripts between ```python and ```
-        python3 << EOF
+# Create a Python script to extract code blocks
+cat > /tmp/extract_scripts.py << 'PYEOF'
 import re
-with open("$SKILL_FILE", "r") as f:
-    content = f.read()
+import sys
+import os
 
-# Find script filename and content
-# Pattern: Install to \`scripts/NAME.py\`:\n\n\`\`\`python\n...CODE...\n\`\`\`
-pattern = r'Install to \`scripts/([^`]+)\`:\s*\n+\`\`\`python\n(.*?)\n\`\`\`'
-matches = re.findall(pattern, content, re.DOTALL)
+skills_dir = sys.argv[1]
+scripts_dir = sys.argv[2]
 
-for filename, code in matches:
-    filepath = "$SCRIPTS_DIR/" + filename
-    with open(filepath, "w") as f:
-        f.write(code)
-    print(f"   ✅ scripts/{filename}")
-EOF
-    fi
-done
+for skill in ["lightning", "ppq", "lnvps", "heartbeat"]:
+    skill_file = os.path.join(skills_dir, skill, "SKILL.md")
+    if not os.path.exists(skill_file):
+        continue
+    
+    with open(skill_file, "r") as f:
+        content = f.read()
+    
+    # Find script filename and content
+    # Pattern: Install to `scripts/NAME.py`:
+    pattern = r'Install to `scripts/([^`]+)`:\s*\n+```python\n(.*?)\n```'
+    matches = re.findall(pattern, content, re.DOTALL)
+    
+    for filename, code in matches:
+        filepath = os.path.join(scripts_dir, filename)
+        with open(filepath, "w") as f:
+            f.write(code)
+        print(f"   ✅ scripts/{filename}")
+PYEOF
+
+python3 /tmp/extract_scripts.py "$SKILLS_DIR" "$SCRIPTS_DIR"
+rm -f /tmp/extract_scripts.py
 
 echo ""
 echo "🔍 Checking environment variables..."
