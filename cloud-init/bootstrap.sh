@@ -199,6 +199,22 @@ else
   echo "  WARN: channel.ts not found, skipping hot-patch"
 fi
 
+# --- 4d. Fix normalizePubkey for nostr-tools 2.23+ (openclaw#8570) ---
+echo "  Fixing normalizePubkey for nostr-tools 2.23+..."
+NOSTR_BUS="/usr/lib/node_modules/openclaw/extensions/nostr/src/nostr-bus.ts"
+if [ -f "$NOSTR_BUS" ]; then
+  if grep -q 'typeof decoded.data === "string"' "$NOSTR_BUS"; then
+    echo "  SKIP: normalizePubkey already fixed"
+  else
+    # In nostr-tools 2.23+, nip19.decode().data returns string (hex) not Uint8Array
+    # Add type check to handle both cases
+    sed -i 's|// Convert Uint8Array to hex string|// Handle both string (nostr-tools 2.23+) and Uint8Array (older) return types\n    if (typeof decoded.data === "string") {\n      return decoded.data.toLowerCase();\n    }\n    // Convert Uint8Array to hex string (legacy)|' "$NOSTR_BUS"
+    echo "  normalizePubkey patched"
+  fi
+else
+  echo "  WARN: nostr-bus.ts not found"
+fi
+
 # --- 5. Configure OpenClaw ---
 echo "[5/8] Configuring OpenClaw..."
 

@@ -30,7 +30,6 @@ const MOCK_MODELS = [
   { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', provider: 'Anthropic', description: 'Most capable', input_per_1m: 5.0, output_per_1m: 25.0, context: '200K', ppq_model_id: 'claude-opus-4.5' },
   { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'Anthropic', description: 'Balanced, recommended', input_per_1m: 3.0, output_per_1m: 15.0, context: '200K', ppq_model_id: 'anthropic/claude-3.7-sonnet' },
   { id: 'kimi-k2', name: 'Kimi K2 Instruct', provider: 'Moonshot AI', description: 'Best for agentic tasks', input_per_1m: 0.39, output_per_1m: 1.90, context: '256K', ppq_model_id: 'moonshotai/kimi-k2-0905' },
-  { id: 'qwen3-30b-a3b', name: 'Qwen3-30B-A3B', provider: 'Alibaba', description: 'Cheapest, fast', input_per_1m: 0.08, output_per_1m: 0.33, context: '262K', ppq_model_id: 'qwen/qwen3-30b-a3b-instruct-2507' },
 ];
 
 // --- API Client ---
@@ -85,8 +84,7 @@ export async function fetchModels() {
   const badges = {
     'claude-opus-4-5': { badge: 'Max Quality', badgeClass: 'badge-premium' },
     'claude-3-7-sonnet': { badge: 'Recommended', badgeClass: 'badge-recommended' },
-    'kimi-k2': { badge: 'Best Agentic', badgeClass: 'badge-agentic' },
-    'qwen3-30b-a3b': { badge: 'Cheapest', badgeClass: 'badge-cheap' },
+    'kimi-k2': { badge: 'Best Value', badgeClass: 'badge-cheap' },
   };
 
   return raw.map((m) => ({
