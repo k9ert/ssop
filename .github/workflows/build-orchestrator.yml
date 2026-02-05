@@ -60,3 +60,32 @@ jobs:
           prerelease: true
           files: artifacts/**/*
           make_latest: false
+
+  deploy:
+    needs: release
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    env:
+      HAS_DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
+    steps:
+      - name: Deploy to server
+        if: env.HAS_DEPLOY_KEY == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            echo "Downloading latest orchestrator binary..."
+            curl -sL -o /tmp/ssop-orchestrator \
+              https://github.com/k9ert/ssop/releases/download/orchestrator-latest/ssop-orchestrator-linux-amd64
+            chmod +x /tmp/ssop-orchestrator
+            echo "Stopping service..."
+            sudo systemctl stop ssop || true
+            mv /tmp/ssop-orchestrator /usr/local/bin/ssop-orchestrator
+            echo "Starting service..."
+            sudo systemctl start ssop
+            sleep 2
+            sudo systemctl is-active ssop
+            echo "Deploy complete ✅"
