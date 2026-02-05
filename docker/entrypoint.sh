@@ -112,5 +112,26 @@ EOFCONFIG
 export NOSTR_PRIVATE_KEY="$NOSTR_NSEC"
 export NODE_OPTIONS="--dns-result-order=ipv4first"
 
+# Find openclaw binary
+OPENCLAW_BIN=$(which openclaw 2>/dev/null || echo "")
+if [ -z "$OPENCLAW_BIN" ]; then
+    # Check common npm global paths
+    for candidate in /usr/local/bin/openclaw /usr/lib/node_modules/.bin/openclaw /usr/bin/openclaw; do
+        if [ -x "$candidate" ]; then
+            OPENCLAW_BIN="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -z "$OPENCLAW_BIN" ]; then
+    echo "ERROR: openclaw binary not found in PATH or common locations"
+    echo "PATH=$PATH"
+    ls -la /usr/local/bin/open* 2>/dev/null || echo "Nothing in /usr/local/bin/open*"
+    ls -la /usr/lib/node_modules/.bin/open* 2>/dev/null || echo "Nothing in node_modules/.bin/open*"
+    exit 1
+fi
+
 echo "Config written. Starting OpenClaw gateway..."
-exec openclaw gateway
+echo "Using: $OPENCLAW_BIN"
+exec "$OPENCLAW_BIN" gateway

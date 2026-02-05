@@ -5,14 +5,17 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 curl openssl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install openclaw globally
-RUN npm install -g openclaw@latest 2>&1 | tail -5
+# Install openclaw + nostr-tools globally
+RUN npm install -g openclaw@latest nostr-tools 2>&1 | tail -10
+
+# Verify openclaw is installed and find its path
+RUN which openclaw && openclaw --version
 
 # Install Nostr channel plugin
-RUN openclaw plugins install @openclaw/nostr 2>&1 | tail -3 || true
+RUN openclaw plugins install @openclaw/nostr 2>&1 | tail -5 || true
 
-# Install nostr-tools globally (openclaw#8670 workaround)
-RUN npm install -g nostr-tools
+# Ensure global npm bin is on PATH (node:22-slim uses /usr/local/bin)
+ENV PATH="/usr/local/bin:${PATH}"
 
 # Apply hot-patches at build time (baked into image)
 COPY patches/ /tmp/patches/
