@@ -86,6 +86,6 @@ jobs:
             mv /tmp/ssop-orchestrator /opt/ssop/orchestrator/ssop-orchestrator
             echo "Starting service..."
             sudo systemctl start ssop-orchestrator
-            sleep 2
+            sleep 5
             sudo systemctl is-active ssop-orchestrator
             echo "Deploy complete ✅"
