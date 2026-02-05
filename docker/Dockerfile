@@ -5,6 +5,10 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 curl openssl git && \
     rm -rf /var/lib/apt/lists/*
 
+# Force git to use HTTPS (some npm deps reference git+ssh which fails without SSH keys)
+RUN git config --global url."https://github.com/".insteadOf git@github.com: && \
+    git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
 # Install openclaw + nostr-tools globally
 RUN npm install -g openclaw@latest nostr-tools 2>&1 | tail -10
 
