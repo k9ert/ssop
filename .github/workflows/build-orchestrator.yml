@@ -62,13 +62,31 @@ jobs:
           make_latest: false
 
   deploy:
-    needs: release
+    needs: [build, release]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     env:
       HAS_DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY != '' }}
     steps:
+      - name: Download artifact
+        if: env.HAS_DEPLOY_KEY == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ssop-orchestrator-linux-amd64
+          path: artifact
+
       - name: Deploy to server
+        if: env.HAS_DEPLOY_KEY == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "artifact/ssop-orchestrator-linux-amd64"
+          target: "/tmp/ssop-deploy"
+          strip_components: 1
+
+      - name: Restart service
         if: env.HAS_DEPLOY_KEY == 'true'
         uses: appleboy/ssh-action@v1
         with:
@@ -77,13 +95,11 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
-            echo "Downloading latest orchestrator binary..."
-            curl -sL -o /tmp/ssop-orchestrator \
-              https://github.com/k9ert/ssop/releases/download/orchestrator-latest/ssop-orchestrator-linux-amd64
-            chmod +x /tmp/ssop-orchestrator
+            chmod +x /tmp/ssop-deploy/ssop-orchestrator-linux-amd64
             echo "Stopping service..."
             sudo systemctl stop ssop-orchestrator || true
-            mv /tmp/ssop-orchestrator /opt/ssop/orchestrator/ssop-orchestrator
+            mv /tmp/ssop-deploy/ssop-orchestrator-linux-amd64 /opt/ssop/orchestrator/ssop-orchestrator
+            rm -rf /tmp/ssop-deploy
             echo "Starting service..."
             sudo systemctl start ssop-orchestrator
             sleep 5
