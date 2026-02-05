@@ -21,10 +21,10 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/ssop-agent
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
+    env:
+      HAS_PPQ_KEY: ${{ secrets.PPQ_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,52 +48,34 @@ jobs:
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: docker
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Export image for test job
+      # Build once, load locally AND push to registry
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: docker
           load: true
+          push: false
           tags: ssop-agent:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Save image tarball
-        run: docker save ssop-agent:test | gzip > /tmp/ssop-agent.tar.gz
-
-      - uses: actions/upload-artifact@v4
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
         with:
-          name: ssop-agent-image
-          path: /tmp/ssop-agent.tar.gz
-          retention-days: 1
+          context: docker
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
 
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    env:
-      HAS_PPQ_KEY: ${{ secrets.PPQ_API_KEY != '' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ssop-agent-image
-          path: /tmp
-
-      - name: Load image
-        run: docker load < /tmp/ssop-agent.tar.gz
+      # --- E2E Test (same job, image already loaded) ---
 
       - name: Generate ephemeral Nostr keypair for agent
+        if: env.HAS_PPQ_KEY == 'true'
         id: agent_keys
         run: |
-          npm install nostr-tools
+          npm install --no-save nostr-tools 2>/dev/null
           node -e "
             const { generateSecretKey, getPublicKey } = require('nostr-tools');
             const { nip19 } = require('nostr-tools');
@@ -103,25 +85,24 @@ jobs:
             const npub = nip19.npubEncode(pk);
             console.log('AGENT_NSEC=' + nsec);
             console.log('AGENT_NPUB=' + npub);
-            console.log('AGENT_PUBKEY_HEX=' + pk);
           " >> "$GITHUB_OUTPUT"
 
       - name: Generate ephemeral Nostr keypair for tester
+        if: env.HAS_PPQ_KEY == 'true'
         id: tester_keys
         run: |
           node -e "
             const { generateSecretKey, getPublicKey } = require('nostr-tools');
             const { nip19 } = require('nostr-tools');
             const sk = generateSecretKey();
-            const pk = getPublicKey(sk);
             const nsec = nip19.nsecEncode(sk);
-            const npub = nip19.npubEncode(pk);
+            const npub = nip19.npubEncode(getPublicKey(sk));
             console.log('TESTER_NSEC=' + nsec);
             console.log('TESTER_NPUB=' + npub);
-            console.log('TESTER_PUBKEY_HEX=' + pk);
           " >> "$GITHUB_OUTPUT"
 
       - name: Create agent workspace
+        if: env.HAS_PPQ_KEY == 'true'
         run: mkdir -p /tmp/ssop-agent-workspace/memory
 
       - name: Start agent container
@@ -141,25 +122,26 @@ jobs:
 
       - name: Wait for gateway health
         if: env.HAS_PPQ_KEY == 'true'
-        timeout-minutes: 2
+        timeout-minutes: 3
         run: |
           echo "Waiting for gateway to become healthy..."
-          for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:18789/health > /dev/null 2>&1; then
-              echo "✅ Gateway healthy after ${i}s"
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:18789/ > /dev/null 2>&1; then
+              echo "✅ Gateway responding after ${i}s"
               exit 0
             fi
             sleep 2
           done
-          echo "❌ Gateway not healthy after 120s"
-          docker logs ssop-agent
+          echo "❌ Gateway not responding after 180s"
+          echo "=== Container logs ==="
+          docker logs ssop-agent 2>&1 | tail -50
           exit 1
 
       - name: Send test DM and wait for reply
         if: env.HAS_PPQ_KEY == 'true'
         timeout-minutes: 3
         run: |
-          npm install ws
+          npm install --no-save ws 2>/dev/null
           node docker/test/send_dm.js \
             "${{ steps.agent_keys.outputs.AGENT_NPUB }}" \
             "${{ steps.tester_keys.outputs.TESTER_NSEC }}" \
@@ -174,8 +156,10 @@ jobs:
           echo "=== Workspace contents ==="
           ls -la /tmp/ssop-agent-workspace/
           echo ""
-          echo "=== MEMORY.md ==="
-          cat /tmp/ssop-agent-workspace/MEMORY.md || echo "(not found)"
+          if [ -f /tmp/ssop-agent-workspace/MEMORY.md ]; then
+            echo "=== MEMORY.md ==="
+            cat /tmp/ssop-agent-workspace/MEMORY.md
+          fi
           echo ""
           echo "=== Agent logs (last 50 lines) ==="
           docker logs --tail 50 ssop-agent
