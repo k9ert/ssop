@@ -1,8 +1,8 @@
 FROM node:22-slim
 
-# System deps: python3 for hot-patches, curl for health checks, openssl for token gen
+# System deps: python3 for hot-patches, curl for health checks, openssl for token gen, git for npm deps
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 curl openssl && \
+    apt-get install -y --no-install-recommends python3 curl openssl git && \
     rm -rf /var/lib/apt/lists/*
 
 # Install openclaw + nostr-tools globally
