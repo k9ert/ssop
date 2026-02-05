@@ -99,7 +99,7 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
   },
   "gateway": {
     "port": $GATEWAY_PORT,
-    "mode": "local",
+    "bind": "0.0.0.0",
     "auth": {
       "mode": "token",
       "token": "$GW_TOKEN"
@@ -131,6 +131,10 @@ if [ -z "$OPENCLAW_BIN" ]; then
     ls -la /usr/lib/node_modules/.bin/open* 2>/dev/null || echo "Nothing in node_modules/.bin/open*"
     exit 1
 fi
+
+# Enable plugins (doctor --fix auto-enables configured channels)
+echo "Running openclaw doctor --fix..."
+"$OPENCLAW_BIN" doctor --fix 2>&1 || true
 
 echo "Config written. Starting OpenClaw gateway..."
 echo "Using: $OPENCLAW_BIN"
