@@ -15,8 +15,9 @@ RUN git config --global url."https://github.com/".insteadOf git@github.com: && \
 COPY package.json /tmp/versions.json
 RUN OPENCLAW_V=$(node -p "require('/tmp/versions.json').dependencies.openclaw") && \
     NOSTR_V=$(node -p "require('/tmp/versions.json').dependencies['nostr-tools']") && \
-    echo "Installing openclaw@$OPENCLAW_V nostr-tools@$NOSTR_V" && \
-    npm install -g "openclaw@$OPENCLAW_V" "nostr-tools@$NOSTR_V" 2>&1 | tail -10 && \
+    ZOD_V=$(node -p "require('/tmp/versions.json').dependencies.zod") && \
+    echo "Installing openclaw@$OPENCLAW_V nostr-tools@$NOSTR_V zod@$ZOD_V" && \
+    npm install -g "openclaw@$OPENCLAW_V" "nostr-tools@$NOSTR_V" "zod@$ZOD_V" 2>&1 | tail -10 && \
     rm /tmp/versions.json
 
 # Verify openclaw is installed and find its path

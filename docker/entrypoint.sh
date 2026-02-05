@@ -99,7 +99,7 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
   },
   "gateway": {
     "port": $GATEWAY_PORT,
-    "bind": "0.0.0.0",
+    "bind": "lan",
     "auth": {
       "mode": "token",
       "token": "$GW_TOKEN"
