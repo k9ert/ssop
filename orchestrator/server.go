@@ -65,7 +65,6 @@ type Model struct {
 }
 
 var plans = []Plan{
-	{ID: "tiny", Name: "Tiny", CPU: 1, RAM: "1 GB", Disk: "40 GB SSD", SatsMo: 4200, FiatMo: "~$3.20", LNVPSTemplate: 1},
 	{ID: "small", Name: "Small", CPU: 2, RAM: "2 GB", Disk: "80 GB SSD", SatsMo: 8400, FiatMo: "~$6.05", LNVPSTemplate: 2},
 	{ID: "medium", Name: "Medium", CPU: 4, RAM: "4 GB", Disk: "160 GB SSD", SatsMo: 16800, FiatMo: "~$11.74", LNVPSTemplate: 3},
 	{ID: "large", Name: "Large", CPU: 8, RAM: "8 GB", Disk: "400 GB SSD", SatsMo: 33600, FiatMo: "~$25.99", LNVPSTemplate: 4},
@@ -75,7 +74,6 @@ var models = []Model{
 	{ID: "claude-opus-4-5", Name: "Claude Opus 4.5", Provider: "Anthropic", Description: "Most capable", InputPer1M: 5.0, OutputPer1M: 25.0, Context: "200K", PPQModelID: "claude-opus-4.5"},
 	{ID: "claude-3-7-sonnet", Name: "Claude 3.7 Sonnet", Provider: "Anthropic", Description: "Balanced, recommended", InputPer1M: 3.0, OutputPer1M: 15.0, Context: "200K", PPQModelID: "anthropic/claude-3.7-sonnet"},
 	{ID: "kimi-k2", Name: "Kimi K2 Instruct", Provider: "Moonshot AI", Description: "Best for agentic tasks", InputPer1M: 0.39, OutputPer1M: 1.90, Context: "256K", PPQModelID: "moonshotai/kimi-k2-0905"},
-	{ID: "qwen3-30b-a3b", Name: "Qwen3-30B-A3B", Provider: "Alibaba", Description: "Cheapest, fast", InputPer1M: 0.08, OutputPer1M: 0.33, Context: "262K", PPQModelID: "qwen/qwen3-30b-a3b-instruct-2507"},
 }
 
 // HandleGetPlans returns available VPS plans

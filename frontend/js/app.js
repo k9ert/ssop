@@ -2,13 +2,12 @@
  * SSOP Frontend — multi-step agent deployment wizard.
  *
  * Flow:
- *   1. Setup Fee (100 sats)
- *   2. Choose VPS Plan        ← fetched from orchestrator API
- *   3. Choose Model + usage   ← fetched from orchestrator API
- *   4. Generate Nostr Identity
- *   5. Pay (VPS + model credits)
- *   6. Provisioning
- *   7. Done
+ *   1. Choose VPS Plan        ← fetched from orchestrator API
+ *   2. Choose Model + usage   ← fetched from orchestrator API
+ *   3. Generate Nostr Identity
+ *   4. Pay (VPS + model credits)
+ *   5. Provisioning
+ *   6. Done
  *
  * Testability:
  *   ?mock=true   — force mock mode, no API calls
@@ -119,29 +118,7 @@ function showStatusBanner(health) {
 }
 
 // ========================================
-// Step 1: Setup Fee
-// ========================================
-function setupFeeStep() {
-  $('#btn-pay-setup').addEventListener('click', () => {
-    const btn = $('#btn-pay-setup');
-    btn.textContent = '⏳ Waiting for payment...';
-    btn.disabled = true;
-
-    // TODO: generate real Lightning invoice for 100 sats via orchestrator
-    const mockInvoice = 'lnbc1000n1pnsetupfee00000000000000000000000000000000000000000000000000000mock';
-    showQR('setup-qr', mockInvoice);
-
-    // Mock: auto-advance after 2s (will be real payment detection)
-    setTimeout(() => {
-      btn.textContent = '✅ Paid!';
-      btn.classList.add('btn-success');
-      setTimeout(() => showStep('step-plan'), 500);
-    }, 2000);
-  });
-}
-
-// ========================================
-// Step 2: Choose Plan (from API) or BYOM
+// Step 1: Choose Plan (from API) or BYOM
 // ========================================
 function setupPlanStep() {
   const tabLnvps = $('#tab-lnvps');
@@ -260,13 +237,12 @@ function updateCostEstimate() {
 
   const cost = calcModelMonthlyCost(state.selectedModel, state.selectedUsage);
   const vpsSats = state.selectedPlan?.satsMo || 0;
-  const totalSats = cost.sats + vpsSats + 100;
+  const totalSats = cost.sats + vpsSats;
 
   el.classList.remove('hidden');
   el.innerHTML = `
     <h3>Monthly Cost Estimate</h3>
     <table class="cost-table">
-      <tr><td>Setup fee (one-time)</td><td class="cost-val">⚡ 100 sats</td></tr>
       <tr><td>VPS (${state.selectedPlan?.name || '—'})</td><td class="cost-val">⚡ ${vpsSats.toLocaleString()} sats/mo</td></tr>
       <tr>
         <td>
@@ -558,7 +534,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   state.models = models;
 
   // Render
-  setupFeeStep();
   setupPlanStep();
   renderPlans(plans);
   renderModels(models);
