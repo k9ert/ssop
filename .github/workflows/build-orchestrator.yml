@@ -1,0 +1,58 @@
+name: Build Orchestrator
+
+on:
+  push:
+    paths:
+      - 'orchestrator/**'
+    branches: [main]
+  pull_request:
+    paths:
+      - 'orchestrator/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build linux/amd64
+        working-directory: orchestrator
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: go build -trimpath -o ssop-orchestrator-linux-amd64 .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ssop-orchestrator-linux-amd64
+          path: orchestrator/ssop-orchestrator-linux-amd64
+
+  release:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create rolling release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: orchestrator-latest
+          name: "Orchestrator (latest main)"
+          body: |
+            Auto-built from main branch.
+            Commit: ${{ github.sha }}
+          prerelease: true
+          files: artifacts/**/*
+          make_latest: false

@@ -345,8 +345,8 @@ You need: a Nostr keypair, a Lightning wallet, and HTTP access.
       -H "Content-Type: application/json" \
       -d '{
         "pubkey": "<your_nostr_hex_pubkey>",
-        "plan": "tiny",
-        "model": "qwen3-30b-a3b",
+        "plan": "small",
+        "model": "kimi-k2",
         "nsec": "<nsec1...>"
       }'
 
@@ -390,8 +390,8 @@ GET  /health               Health check
 
     {
       "pubkey": "hex nostr pubkey (required)",
-      "plan": "tiny|small|medium|large|byom (required)",
-      "model": "claude-opus-4-5|claude-3-7-sonnet|kimi-k2|qwen3-30b-a3b (required)",
+      "plan": "small|medium|large|byom (required)",
+      "model": "claude-opus-4-5|claude-3-7-sonnet|kimi-k2 (required)",
       "nsec": "nsec1... (required — held in memory only, never stored)",
       "byom": {"host": "1.2.3.4", "user": "root", "port": 22},
       "ppq_api_key": "your own ppq.ai key (optional)",
@@ -400,7 +400,6 @@ GET  /health               Health check
 
 ## Plans
 
-tiny:   1 vCPU, 1 GB,  40 GB SSD — 4,200 sats/mo (~$3.20)
 small:  2 vCPU, 2 GB,  80 GB SSD — 8,400 sats/mo (~$6.05)
 medium: 4 vCPU, 4 GB, 160 GB SSD — 16,800 sats/mo (~$11.74)
 large:  8 vCPU, 8 GB, 400 GB SSD — 33,600 sats/mo (~$25.99)
@@ -411,9 +410,8 @@ byom:   bring your own machine    — 100 sats (setup fee only)
 claude-opus-4-5:    $5.00/$25.00 per 1M tokens — most capable
 claude-3-7-sonnet:  $3.00/$15.00 per 1M tokens — recommended
 kimi-k2:            $0.39/$1.90  per 1M tokens — best agentic
-qwen3-30b-a3b:      $0.08/$0.33  per 1M tokens — cheapest
 
-Cheapest agent: Tiny + Qwen3-30B-A3B ~ 4,730 sats/mo (~$4.73)
+Cheapest agent: Small + Kimi K2 ~ 8,930 sats/mo (~$6.44)
 
 ## BYOM (Bring Your Own Machine)
 
