@@ -11,7 +11,13 @@ RUN git config --global url."https://github.com/".insteadOf git@github.com: && \
     git config --global url."https://github.com/".insteadOf ssh://git@github.com/
 
 # Install openclaw + nostr-tools globally
-RUN npm install -g openclaw@latest nostr-tools 2>&1 | tail -10
+# Pin versions — dependabot updates docker/package.json, Dockerfile reads from it
+COPY package.json /tmp/versions.json
+RUN OPENCLAW_V=$(node -p "require('/tmp/versions.json').dependencies.openclaw") && \
+    NOSTR_V=$(node -p "require('/tmp/versions.json').dependencies['nostr-tools']") && \
+    echo "Installing openclaw@$OPENCLAW_V nostr-tools@$NOSTR_V" && \
+    npm install -g "openclaw@$OPENCLAW_V" "nostr-tools@$NOSTR_V" 2>&1 | tail -10 && \
+    rm /tmp/versions.json
 
 # Verify openclaw is installed and find its path
 RUN which openclaw && openclaw --version

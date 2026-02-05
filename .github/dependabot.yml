@@ -1,0 +1,34 @@
+version: 2
+updates:
+  # Docker agent dependencies (openclaw, nostr-tools)
+  - package-ecosystem: "npm"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Go orchestrator dependencies
+  - package-ecosystem: "gomod"
+    directory: "/orchestrator"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "orchestrator"
+
+  # GitHub Actions versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
