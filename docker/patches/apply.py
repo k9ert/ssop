@@ -4,9 +4,18 @@ SSOP Agent Hot-Patch Applier
 Applies known OpenClaw Nostr plugin fixes at Docker build time.
 
 Patches:
-  1. openclaw#7448: subscribeMany double-wraps filter array → use subscribe
-  2. openclaw#7449: handleInboundMessage not a function → full dispatch pipeline
-  3. openclaw#8570: normalizePubkey fails with nostr-tools 2.23+ (string vs Uint8Array)
+  1. https://github.com/openclaw/openclaw/issues/7448
+     subscribeMany double-wraps filter array → use subscribe instead
+
+  2. https://github.com/openclaw/openclaw/issues/7449
+     handleInboundMessage is not a function → replace with full dispatch pipeline
+     (also related: https://github.com/openclaw/openclaw/issues/4547)
+
+  3. https://github.com/openclaw/openclaw/issues/8570
+     normalizePubkey fails with nostr-tools 2.23+ (returns string, not Uint8Array)
+
+Each patch is idempotent — safe to re-run, skips if already applied.
+Remove patches as upstream fixes land.
 """
 
 import os
