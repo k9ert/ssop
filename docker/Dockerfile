@@ -1,8 +1,9 @@
 FROM node:22-slim
 
-# System deps: python3 for hot-patches, curl for health checks, openssl for token gen, git for npm deps
+# System deps: python3 for hot-patches, curl for health checks, openssl for token gen,
+# git + ca-certificates for npm deps that reference git repos
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 curl openssl git && \
+    apt-get install -y --no-install-recommends python3 curl openssl git ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 # Force git to use HTTPS (some npm deps reference git+ssh which fails without SSH keys)
