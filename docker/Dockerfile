@@ -24,7 +24,6 @@ RUN OPENCLAW_V=$(node -p "require('/tmp/versions.json').dependencies.openclaw") 
 RUN which openclaw && openclaw --version
 
 # Install Nostr channel plugin
-RUN openclaw plugins install @openclaw/nostr 2>&1 | tail -5 || true
 
 # Ensure global npm bin is on PATH (node:22-slim uses /usr/local/bin)
 ENV PATH="/usr/local/bin:${PATH}"

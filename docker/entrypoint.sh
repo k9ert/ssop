@@ -100,6 +100,7 @@ cat > "$OPENCLAW_DIR/openclaw.json" << EOFCONFIG
   "gateway": {
     "port": $GATEWAY_PORT,
     "bind": "lan",
+    "mode": "local",
     "auth": {
       "mode": "token",
       "token": "$GW_TOKEN"
@@ -110,6 +111,7 @@ EOFCONFIG
 
 # --- Export env for openclaw ---
 export NOSTR_PRIVATE_KEY="$NOSTR_NSEC"
+export NODE_PATH="/usr/local/lib/node_modules"
 export NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # Find openclaw binary
