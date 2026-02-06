@@ -1,41 +1,52 @@
-FROM node:22-slim
+# Multi-stage build for smaller image
+# Stage 1: Build (install deps)
+FROM node:22-slim AS builder
 
-# System deps: python3 for hot-patches, curl for health checks, openssl for token gen,
-# git + ca-certificates for npm deps that reference git repos
 RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 curl openssl git ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Force git to use HTTPS (some npm deps reference git+ssh which fails without SSH keys)
 RUN git config --global url."https://github.com/".insteadOf git@github.com: && \
     git config --global url."https://github.com/".insteadOf ssh://git@github.com/
 
-# Install openclaw + nostr-tools globally
-# Pin versions — dependabot updates docker/package.json, Dockerfile reads from it
 COPY package.json /tmp/versions.json
 RUN OPENCLAW_V=$(node -p "require('/tmp/versions.json').dependencies.openclaw") && \
     NOSTR_V=$(node -p "require('/tmp/versions.json').dependencies['nostr-tools']") && \
     ZOD_V=$(node -p "require('/tmp/versions.json').dependencies.zod") && \
     echo "Installing openclaw@$OPENCLAW_V nostr-tools@$NOSTR_V zod@$ZOD_V" && \
-    npm install -g "openclaw@$OPENCLAW_V" "nostr-tools@$NOSTR_V" "zod@$ZOD_V" 2>&1 | tail -10 && \
+    npm install -g "openclaw@$OPENCLAW_V" "nostr-tools@$NOSTR_V" "zod@$ZOD_V" && \
     rm /tmp/versions.json
 
-# Verify openclaw is installed and find its path
-RUN which openclaw && openclaw --version
-
-# Install Nostr channel plugin
-
-# Ensure global npm bin is on PATH (node:22-slim uses /usr/local/bin)
-ENV PATH="/usr/local/bin:${PATH}"
-
-# Apply hot-patches at build time (baked into image)
+# Apply hot-patches in builder
 COPY patches/ /tmp/patches/
 RUN python3 /tmp/patches/apply.py && rm -rf /tmp/patches
 
-# Default workspace skeleton (will be overlaid by bind mount)
+# Prune dev dependencies and caches
+RUN npm cache clean --force && \
+    rm -rf /root/.npm /root/.node-gyp /tmp/*
+
+# Stage 2: Runtime (minimal)
+FROM node:22-slim
+
+# Only runtime deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl openssl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy openclaw from builder
+COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/openclaw/dist/entry.js /usr/local/bin/openclaw
+
+# Verify
+RUN openclaw --version
+
+ENV PATH="/usr/local/bin:${PATH}"
+ENV NODE_PATH="/usr/local/lib/node_modules"
+
+# Workspace defaults
 COPY workspace/ /opt/ssop/workspace-defaults/
 
-# Entrypoint generates config from env vars and starts gateway
+# Entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

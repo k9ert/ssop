@@ -48,7 +48,6 @@ jobs:
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # Build once, load locally AND push to registry
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -69,107 +68,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
 
-      # --- E2E Test (same job, image already loaded) ---
+      # --- E2E Test using shared scripts ---
 
-      - name: Generate ephemeral Nostr keypair for agent
+      - name: Setup Node.js for tests
         if: env.HAS_PPQ_KEY == 'true'
-        id: agent_keys
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install test dependencies
+        if: env.HAS_PPQ_KEY == 'true'
+        run: npm install --no-save ws nostr-tools
+
+      - name: Run E2E test
+        if: env.HAS_PPQ_KEY == 'true'
+        timeout-minutes: 5
         run: |
-          npm install --no-save nostr-tools 2>/dev/null
-          node -e "
-            const { generateSecretKey, getPublicKey } = require('nostr-tools');
-            const { nip19 } = require('nostr-tools');
-            const sk = generateSecretKey();
-            const pk = getPublicKey(sk);
-            const nsec = nip19.nsecEncode(sk);
-            const npub = nip19.npubEncode(pk);
-            console.log('AGENT_NSEC=' + nsec);
-            console.log('AGENT_NPUB=' + npub);
-          " >> "$GITHUB_OUTPUT"
-
-      - name: Generate ephemeral Nostr keypair for tester
-        if: env.HAS_PPQ_KEY == 'true'
-        id: tester_keys
-        run: |
-          node -e "
-            const { generateSecretKey, getPublicKey } = require('nostr-tools');
-            const { nip19 } = require('nostr-tools');
-            const sk = generateSecretKey();
-            const nsec = nip19.nsecEncode(sk);
-            const npub = nip19.npubEncode(getPublicKey(sk));
-            console.log('TESTER_NSEC=' + nsec);
-            console.log('TESTER_NPUB=' + npub);
-          " >> "$GITHUB_OUTPUT"
-
-      - name: Create agent workspace
-        if: env.HAS_PPQ_KEY == 'true'
-        run: mkdir -p /tmp/ssop-agent-workspace/memory
-
-      - name: Start agent container
-        if: env.HAS_PPQ_KEY == 'true'
-        run: |
-          docker run -d --name ssop-agent \
-            -e NOSTR_NSEC="${{ steps.agent_keys.outputs.AGENT_NSEC }}" \
-            -e NOSTR_NPUB="${{ steps.agent_keys.outputs.AGENT_NPUB }}" \
-            -e PPQ_API_KEY="${{ secrets.PPQ_API_KEY }}" \
-            -e MODEL_ID="qwen/qwen3-30b-a3b" \
-            -e AGENT_NAME="CI-Test-Agent" \
-            -e OWNER_NPUB="${{ steps.tester_keys.outputs.TESTER_NPUB }}" \
-            -e DM_POLICY="open" \
-            -v /tmp/ssop-agent-workspace:/root/agent \
-            -p 18789:18789 \
-            ssop-agent:test
-
-      - name: Wait for gateway health
-        if: env.HAS_PPQ_KEY == 'true'
-        timeout-minutes: 3
-        run: |
-          echo "Waiting for gateway to become healthy..."
-          for i in $(seq 1 90); do
-            if curl -sf http://127.0.0.1:18789/ > /dev/null 2>&1; then
-              echo "✅ Gateway responding after ${i}s"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "❌ Gateway not responding after 180s"
-          echo "=== Container logs ==="
-          docker logs ssop-agent 2>&1 | tail -50
-          exit 1
-
-      - name: Send test DM and wait for reply
-        if: env.HAS_PPQ_KEY == 'true'
-        timeout-minutes: 3
-        run: |
-          npm install --no-save ws nostr-tools 2>/dev/null
-          node docker/test/send_dm.js \
-            "${{ steps.agent_keys.outputs.AGENT_NPUB }}" \
-            "${{ steps.tester_keys.outputs.TESTER_NSEC }}" \
-            120
-        env:
-          TEST_MESSAGE: "Reply with exactly: PONG"
-          RELAY_URL: "wss://relay.damus.io"
-
-      - name: Verify workspace was used
-        if: env.HAS_PPQ_KEY == 'true'
-        run: |
-          echo "=== Workspace contents ==="
-          ls -la /tmp/ssop-agent-workspace/
-          echo ""
-          if [ -f /tmp/ssop-agent-workspace/MEMORY.md ]; then
-            echo "=== MEMORY.md ==="
-            cat /tmp/ssop-agent-workspace/MEMORY.md
-          fi
-          echo ""
-          echo "=== Agent logs (last 50 lines) ==="
-          docker logs --tail 50 ssop-agent
+          chmod +x docker/test/run_e2e.sh
+          docker/test/run_e2e.sh ssop-agent:test "${{ secrets.PPQ_API_KEY }}"
 
       - name: Skip notice (no PPQ key)
         if: env.HAS_PPQ_KEY != 'true'
         run: echo "⚠️ PPQ_API_KEY not set — skipping agent E2E test. Build-only."
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker stop ssop-agent 2>/dev/null || true
-          docker rm ssop-agent 2>/dev/null || true
