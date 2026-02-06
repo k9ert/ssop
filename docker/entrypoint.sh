@@ -112,7 +112,7 @@ EOFCONFIG
 # --- Export env for openclaw ---
 export NOSTR_PRIVATE_KEY="$NOSTR_NSEC"
 export NODE_PATH="/usr/local/lib/node_modules"
-export NODE_OPTIONS="--dns-result-order=ipv4first"
+export NODE_OPTIONS="--max-old-space-size=768 --dns-result-order=ipv4first"
 
 # Find openclaw binary
 OPENCLAW_BIN=$(which openclaw 2>/dev/null || echo "")
