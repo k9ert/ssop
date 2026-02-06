@@ -1,5 +1,5 @@
 # Multi-stage build for smaller image
-# Stage 1: Build (install deps)
+# Stage 1: Build (install deps + prune)
 FROM node:22-slim AS builder
 
 RUN apt-get update && \
@@ -17,23 +17,28 @@ RUN OPENCLAW_V=$(node -p "require('/tmp/versions.json').dependencies.openclaw") 
     npm install -g "openclaw@$OPENCLAW_V" "nostr-tools@$NOSTR_V" "zod@$ZOD_V" && \
     rm /tmp/versions.json
 
-# Apply hot-patches in builder
+# Apply hot-patches
 COPY patches/ /tmp/patches/
 RUN python3 /tmp/patches/apply.py && rm -rf /tmp/patches
 
-# Prune dev dependencies and caches
-RUN npm cache clean --force && \
+# Prune unused dependencies in builder (saves ~724MB)
+# - llama-cpp: local LLM inference (we use ppq API instead)
+# - docs: not needed at runtime
+RUN rm -rf \
+    /usr/local/lib/node_modules/openclaw/node_modules/@node-llama-cpp \
+    /usr/local/lib/node_modules/openclaw/node_modules/node-llama-cpp \
+    /usr/local/lib/node_modules/openclaw/docs && \
+    npm cache clean --force && \
     rm -rf /root/.npm /root/.node-gyp /tmp/*
 
 # Stage 2: Runtime (minimal)
 FROM node:22-slim
 
-# Only runtime deps
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl openssl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy openclaw from builder
+# Copy pruned openclaw from builder
 COPY --from=builder /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/openclaw/dist/entry.js /usr/local/bin/openclaw
 
@@ -43,10 +48,7 @@ RUN openclaw --version
 ENV PATH="/usr/local/bin:${PATH}"
 ENV NODE_PATH="/usr/local/lib/node_modules"
 
-# Workspace defaults
 COPY workspace/ /opt/ssop/workspace-defaults/
-
-# Entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
