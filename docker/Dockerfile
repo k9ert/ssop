@@ -23,11 +23,15 @@ RUN python3 /tmp/patches/apply.py && rm -rf /tmp/patches
 
 # Prune unused dependencies in builder (saves ~724MB)
 # - llama-cpp: local LLM inference (we use ppq API instead)
-# - docs: not needed at runtime
+# - docs: mostly not needed, but keep templates for workspace init
 RUN rm -rf \
     /usr/local/lib/node_modules/openclaw/node_modules/@node-llama-cpp \
-    /usr/local/lib/node_modules/openclaw/node_modules/node-llama-cpp \
-    /usr/local/lib/node_modules/openclaw/docs && \
+    /usr/local/lib/node_modules/openclaw/node_modules/node-llama-cpp && \
+    # Prune docs but keep reference/templates
+    mv /usr/local/lib/node_modules/openclaw/docs/reference /tmp/reference && \
+    rm -rf /usr/local/lib/node_modules/openclaw/docs && \
+    mkdir -p /usr/local/lib/node_modules/openclaw/docs && \
+    mv /tmp/reference /usr/local/lib/node_modules/openclaw/docs/reference && \
     npm cache clean --force && \
     rm -rf /root/.npm /root/.node-gyp /tmp/*
 
