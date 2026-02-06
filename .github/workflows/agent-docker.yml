@@ -141,7 +141,7 @@ jobs:
         if: env.HAS_PPQ_KEY == 'true'
         timeout-minutes: 3
         run: |
-          npm install --no-save ws 2>/dev/null
+          npm install --no-save ws nostr-tools 2>/dev/null
           node docker/test/send_dm.js \
             "${{ steps.agent_keys.outputs.AGENT_NPUB }}" \
             "${{ steps.tester_keys.outputs.TESTER_NSEC }}" \
