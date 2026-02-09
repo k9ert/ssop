@@ -472,11 +472,33 @@ if [ "$MODE" = "native" ]; then
   if [ -n "$NOSTR_EXT" ]; then
     echo "  Found Nostr extension at: $NOSTR_EXT"
     
-    # Patch subscribeMany
+    # Patch subscribeMany (use Python for multiline pattern)
     NOSTR_BUS="$NOSTR_EXT/nostr-bus.ts"
     if [ -f "$NOSTR_BUS" ] && grep -q 'pool\.subscribeMany' "$NOSTR_BUS"; then
-      sed -i 's/pool\.subscribeMany(relays, \[\({ kinds: \[4\], "#p": \[pk\], since }\)\], {/pool.subscribe(relays, \1, {/' "$NOSTR_BUS"
-      echo "  Patched subscribeMany"
+      python3 - "$NOSTR_BUS" << 'SUBSCRIBEMANY_PATCH'
+import sys
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+
+old = '''const sub = pool.subscribeMany(
+    relays,
+    [{ kinds: [4], "#p": [pk], since }] as unknown as Parameters<typeof pool.subscribeMany>[1],'''
+
+new = '''const sub = pool.subscribe(
+    relays,
+    { kinds: [4], "#p": [pk], since },'''
+
+if old in content:
+    content = content.replace(old, new)
+    with open(path, 'w') as f:
+        f.write(content)
+    print("  Patched subscribeMany")
+elif 'pool.subscribe(' in content and 'pool.subscribeMany' not in content:
+    print("  subscribeMany already patched")
+else:
+    print("  WARN: subscribeMany pattern not found")
+SUBSCRIBEMANY_PATCH
     fi
     
     # Patch normalizePubkey
@@ -612,7 +634,8 @@ EOFENV
       "profile": { "name": "$AGENT_NAME", "displayName": "$AGENT_NAME", "about": "Self-sovereign AI agent powered by SSOP ⚡" }
     }
   },
-  "gateway": { "port": 18789, "mode": "local", "auth": { "mode": "token", "token": "$GW_TOKEN" } }
+  "gateway": { "port": 18789, "mode": "local", "auth": { "mode": "token", "token": "$GW_TOKEN" } },
+  "plugins": { "entries": { "nostr": { "enabled": true } } }
 }
 EOFCONFIG
   chown "$TARGET_USER:$TARGET_USER" "$OPENCLAW_DIR/openclaw.json"
