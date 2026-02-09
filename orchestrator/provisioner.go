@@ -14,12 +14,15 @@ import (
 
 // BootstrapConfig is the config.json sent to the target machine
 type BootstrapConfig struct {
-	Nsec      string `json:"nsec"`
-	Npub      string `json:"npub"`
-	ModelID   string `json:"model_id"`
-	PPQAPIKey string `json:"ppq_api_key"`
-	AgentName string `json:"agent_name"`
-	OwnerNpub string `json:"owner_npub,omitempty"`
+	Nsec           string `json:"nsec"`
+	Npub           string `json:"npub"`
+	ModelID        string `json:"model_id"`
+	PPQAPIKey      string `json:"ppq_api_key"`
+	AgentName      string `json:"agent_name"`
+	OwnerNpub      string `json:"owner_npub,omitempty"`
+	OwnerPubkeyHex string `json:"owner_pubkey_hex,omitempty"` // user's hex pubkey for USER.md
+	PlanName       string `json:"plan_name,omitempty"`        // for IDENTITY.md
+	ModelName      string `json:"model_name,omitempty"`       // for IDENTITY.md
 }
 
 // ProvisionOrder runs the full bootstrap pipeline for a paid order.
@@ -93,14 +96,35 @@ func (s *Server) ProvisionOrder(orderID string) {
 		return
 	}
 
+	// --- Resolve plan name ---
+	planName := order.Plan
+	for _, p := range plans {
+		if p.ID == order.Plan {
+			planName = p.Name
+			break
+		}
+	}
+
+	// --- Resolve model name ---
+	var modelName string
+	for _, m := range models {
+		if m.ID == order.Model {
+			modelName = m.Name
+			break
+		}
+	}
+
 	// --- Build bootstrap config ---
 	bsCfg := BootstrapConfig{
-		Nsec:      secrets.Nsec,
-		Npub:      secrets.Npub,
-		ModelID:   ppqModelID,
-		PPQAPIKey: ppqKey,
-		AgentName: "Agent",
-		OwnerNpub: secrets.OwnerNpub,
+		Nsec:           secrets.Nsec,
+		Npub:           secrets.Npub,
+		ModelID:        ppqModelID,
+		PPQAPIKey:      ppqKey,
+		AgentName:      "Agent",
+		OwnerNpub:      secrets.OwnerNpub,
+		OwnerPubkeyHex: order.Pubkey,    // user's hex pubkey for USER.md
+		PlanName:       planName,
+		ModelName:      modelName,
 	}
 
 	// Create temp directory for config
