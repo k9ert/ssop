@@ -129,12 +129,54 @@ Options:
 - [ ] Agent health check endpoint
 - [ ] Payment verification (LNbits webhook)
 
-## Decisions Needed
+## Decisions (Resolved)
 
-1. **Template injection method:** A/B/C/D?
-2. **Agent keypair generation:** Orchestrator or agent?
-3. **First contact direction:** Agent→User or User→Agent?
-4. **Failure handling:** Refund policy? Retry limits?
+1. **Template injection:** ✅ **A — Orchestrator writes via SSH** after VM is up
+2. **Agent keypair:** ✅ **Passed from UI** (user creates fresh or injects existing). Orchestrator can also inject for testing.
+3. **First contact:** ✅ **A — Agent DMs user** (better UX). User can still initiate if it fails.
+4. **Failure handling:** ✅ **None for now** — assume Nostr DM works.
+
+## Implementation Plan
+
+### Orchestrator (Go)
+
+1. **POST /api/orders** — accepts:
+   - `user_pubkey` (hex) — user's Nostr pubkey
+   - `agent_pubkey` (hex) — agent's Nostr pubkey  
+   - `agent_nsec` — agent's Nostr private key
+   - `plan` — LNVPS plan ID
+   - `model` — LLM model ID
+
+2. **After payment confirmed:**
+   - Create VM via LNVPS API
+   - Wait for VM to be SSH-reachable
+   - SSH in and:
+     - Run bootstrap script (install OpenClaw, deps)
+     - Write workspace templates with placeholders filled
+     - Write config with model/Nostr settings
+     - Start OpenClaw gateway
+
+3. **Return to frontend:**
+   - Agent npub
+   - VM IP / hostname
+   - SSH credentials (optional, for debugging)
+
+### Templates to Fill (via SSH)
+
+| File | Placeholders |
+|------|--------------|
+| `USER.md` | `{{USER_PUBKEY_HEX}}`, `{{USER_NPUB}}` |
+| `IDENTITY.md` | `{{AGENT_PUBKEY_HEX}}`, `{{AGENT_NPUB}}`, `{{PLAN_NAME}}`, `{{MODEL_NAME}}`, `{{REGION}}`, `{{CREATED_DATE}}` |
+| `openclaw.yaml` | `{{AGENT_NSEC}}`, `{{MODEL_ENDPOINT}}`, `{{MODEL_API_KEY}}` |
+
+### Agent Boot Sequence
+
+1. OpenClaw starts → loads workspace files
+2. Agent reads `BOOTSTRAP.md` → sees instruction to DM user
+3. Agent reads `USER.md` → gets user's Nostr pubkey
+4. Agent sends Nostr DM: "Hey! I just came online..."
+5. User receives DM → conversation begins
+6. Agent deletes `BOOTSTRAP.md` after successful intro
 
 ---
 
