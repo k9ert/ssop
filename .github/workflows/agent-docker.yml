@@ -81,7 +81,7 @@ jobs:
       # --- E2E Test ---
       - name: Setup Node.js for tests
         if: env.HAS_PPQ_KEY == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
