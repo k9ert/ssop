@@ -24,11 +24,12 @@ type Order struct {
 	AmountSats   int64  `json:"amount_sats"`
 
 	// Provisioning
-	VMID      int    `json:"vm_id,omitempty"`
-	VMIP      string `json:"vm_ip,omitempty"`
-	SSHAccess string `json:"ssh_access,omitempty"`
-	ErrorMsg  string `json:"error_msg,omitempty"`
-	IsBYOM    bool   `json:"is_byom"`           // true if user provided their own machine
+	VMID        int    `json:"vm_id,omitempty"`
+	VMIP        string `json:"vm_ip,omitempty"`
+	SSHAccess   string `json:"ssh_access,omitempty"`
+	GatewayPort int    `json:"gateway_port,omitempty"`
+	ErrorMsg    string `json:"error_msg,omitempty"`
+	IsBYOM      bool   `json:"is_byom"`           // true if user provided their own machine
 }
 
 // InitDB creates the SQLite database and tables
@@ -54,6 +55,7 @@ func InitDB(path string) (*sql.DB, error) {
 		vm_id INTEGER,
 		vm_ip TEXT,
 		ssh_access TEXT,
+		gateway_port INTEGER DEFAULT 0,
 		error_msg TEXT
 	);
 
@@ -87,13 +89,14 @@ func GetOrder(db *sql.DB, id string) (*Order, error) {
 		        COALESCE(setup_invoice,''), setup_paid,
 		        COALESCE(main_invoice,''), main_paid, amount_sats,
 		        COALESCE(vm_id,0), COALESCE(vm_ip,''),
-		        COALESCE(ssh_access,''), COALESCE(error_msg,'')
+		        COALESCE(ssh_access,''), COALESCE(gateway_port,0),
+		        COALESCE(error_msg,'')
 		 FROM orders WHERE id = ?`, id,
 	).Scan(
 		&o.ID, &o.CreatedAt, &o.State, &o.Plan, &o.Model, &o.Pubkey,
 		&o.SetupInvoice, &o.SetupPaid,
 		&o.MainInvoice, &o.MainPaid, &o.AmountSats,
-		&o.VMID, &o.VMIP, &o.SSHAccess, &o.ErrorMsg,
+		&o.VMID, &o.VMIP, &o.SSHAccess, &o.GatewayPort, &o.ErrorMsg,
 	)
 	if err != nil {
 		return nil, err
@@ -125,10 +128,23 @@ func UpdateOrderPaid(db *sql.DB, id string) error {
 }
 
 // UpdateOrderVM updates the VM details of an order
-func UpdateOrderVM(db *sql.DB, id string, vmID int, vmIP, sshAccess string) error {
+func UpdateOrderVM(db *sql.DB, id string, vmID int, vmIP, sshAccess string, gatewayPort int) error {
 	_, err := db.Exec(
-		`UPDATE orders SET vm_id = ?, vm_ip = ?, ssh_access = ?, state = 'ready' WHERE id = ?`,
-		vmID, vmIP, sshAccess, id,
+		`UPDATE orders SET vm_id = ?, vm_ip = ?, ssh_access = ?, gateway_port = ?, state = 'ready' WHERE id = ?`,
+		vmID, vmIP, sshAccess, gatewayPort, id,
 	)
 	return err
+}
+
+// AllocateNextPort finds the next available gateway port starting from basePort.
+func AllocateNextPort(db *sql.DB, basePort int) (int, error) {
+	var maxPort sql.NullInt64
+	err := db.QueryRow(`SELECT MAX(gateway_port) FROM orders WHERE gateway_port > 0`).Scan(&maxPort)
+	if err != nil {
+		return 0, err
+	}
+	if maxPort.Valid && int(maxPort.Int64) >= basePort {
+		return int(maxPort.Int64) + 1, nil
+	}
+	return basePort, nil
 }

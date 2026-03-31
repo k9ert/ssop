@@ -3,7 +3,7 @@ name: ssop
 version: 0.1.0
 description: Deploy a self-sovereign AI agent on your own VPS. Pay with Lightning. No KYC. No cloud accounts.
 homepage: https://ssop.pages.dev
-metadata: {"category": "infrastructure", "api_base": "https://146-190-230-121.sslip.io"}
+metadata: {"category": "infrastructure", "api_base": "https://185-18-221-5.sslip.io:8443"}
 ---
 
 # SSOP — Self Sovereign OpenClaw Platform
@@ -11,7 +11,7 @@ metadata: {"category": "infrastructure", "api_base": "https://146-190-230-121.ss
 Deploy your own AI agent on dedicated infrastructure. Pay with Lightning. Own your keys.
 
 **Frontend:** https://ssop.pages.dev
-**API:** https://146-190-230-121.sslip.io
+**API:** https://185-18-221-5.sslip.io:8443
 **SKILL.md:** https://ssop.pages.dev/SKILL.md
 
 ## What You Get
@@ -30,14 +30,14 @@ You need: a Nostr keypair, a Lightning wallet, and HTTP access.
 ### 1. Check available plans and models
 
 ```bash
-curl https://146-190-230-121.sslip.io/api/plans
-curl https://146-190-230-121.sslip.io/api/models
+curl https://185-18-221-5.sslip.io:8443/api/plans
+curl https://185-18-221-5.sslip.io:8443/api/models
 ```
 
 ### 2. Create an order
 
 ```bash
-curl -X POST https://146-190-230-121.sslip.io/api/order \
+curl -X POST https://185-18-221-5.sslip.io:8443/api/order \
   -H "Content-Type: application/json" \
   -d '{
     "pubkey": "<your_nostr_hex_pubkey>",
@@ -62,7 +62,7 @@ Response:
 Pay `bolt11` with any Lightning wallet. Then poll for confirmation:
 
 ```bash
-curl https://146-190-230-121.sslip.io/api/order/<order_id>/check
+curl https://185-18-221-5.sslip.io:8443/api/order/<order_id>/check
 # → {"paid": true, "state": "provisioning"}
 ```
 
@@ -71,7 +71,7 @@ curl https://146-190-230-121.sslip.io/api/order/<order_id>/check
 Poll order status until `state` is `"ready"`:
 
 ```bash
-curl https://146-190-230-121.sslip.io/api/order/<order_id>
+curl https://185-18-221-5.sslip.io:8443/api/order/<order_id>
 ```
 
 When ready, your agent has:
@@ -84,7 +84,7 @@ When ready, your agent has:
 
 ## API Reference
 
-**Base URL:** `https://146-190-230-121.sslip.io`
+**Base URL:** `https://185-18-221-5.sslip.io:8443`
 
 ### Endpoints
 
@@ -158,7 +158,7 @@ When ready, your agent has:
 Already have a VPS? Skip LNVPS entirely:
 
 ```bash
-curl -X POST https://146-190-230-121.sslip.io/api/order \
+curl -X POST https://185-18-221-5.sslip.io:8443/api/order \
   -H "Content-Type: application/json" \
   -d '{
     "pubkey": "<hex_pubkey>",

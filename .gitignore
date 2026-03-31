@@ -29,3 +29,6 @@ Thumbs.db
 
 # Logs
 *.log
+orchestrator/ssop-orchestrator
+orchestrator/orchestrator
+*.db
