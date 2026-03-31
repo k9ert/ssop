@@ -310,7 +310,7 @@ name: ssop
 version: 0.1.0
 description: Deploy a self-sovereign AI agent on your own VPS. Pay with Lightning. No KYC. No cloud accounts.
 homepage: https://ssop.pages.dev
-metadata: {"category": "infrastructure", "api_base": "https://185-18-221-5.sslip.io"}
+metadata: {"category": "infrastructure", "api_base": "https://185-18-221-5.sslip.io:8443"}
 ---
 
 # SSOP — Self Sovereign OpenClaw Platform
@@ -318,7 +318,7 @@ metadata: {"category": "infrastructure", "api_base": "https://185-18-221-5.sslip
 Deploy your own AI agent on dedicated infrastructure. Pay with Lightning. Own your keys.
 
 **Frontend:** https://ssop.pages.dev
-**API:** https://185-18-221-5.sslip.io
+**API:** https://185-18-221-5.sslip.io:8443
 **SKILL.md:** https://ssop.pages.dev/SKILL.md
 
 ## What You Get
@@ -336,12 +336,12 @@ You need: a Nostr keypair, a Lightning wallet, and HTTP access.
 
 ### 1. Check available plans and models
 
-    curl https://185-18-221-5.sslip.io/api/plans
-    curl https://185-18-221-5.sslip.io/api/models
+    curl https://185-18-221-5.sslip.io:8443/api/plans
+    curl https://185-18-221-5.sslip.io:8443/api/models
 
 ### 2. Create an order
 
-    curl -X POST https://185-18-221-5.sslip.io/api/order \
+    curl -X POST https://185-18-221-5.sslip.io:8443/api/order \
       -H "Content-Type: application/json" \
       -d '{
         "pubkey": "<your_nostr_hex_pubkey>",
@@ -363,20 +363,20 @@ Response:
 
 Pay the bolt11 with any Lightning wallet. Then poll for confirmation:
 
-    curl https://185-18-221-5.sslip.io/api/order/<order_id>/check
+    curl https://185-18-221-5.sslip.io:8443/api/order/<order_id>/check
     # -> {"paid": true, "state": "provisioning"}
 
 ### 4. Wait for provisioning
 
 Poll order status until state is "ready":
 
-    curl https://185-18-221-5.sslip.io/api/order/<order_id>
+    curl https://185-18-221-5.sslip.io:8443/api/order/<order_id>
 
 When ready, your agent has SSH access, OpenClaw running, Nostr DMs, and ppq.ai configured.
 
 ## API Reference
 
-Base URL: https://185-18-221-5.sslip.io
+Base URL: https://185-18-221-5.sslip.io:8443
 
 GET  /api/plans            List VPS plans
 GET  /api/models           List AI models
