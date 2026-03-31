@@ -36,7 +36,7 @@ func main() {
 		NostrNsec:     os.Getenv("NOSTR_NSEC"),
 		SetupFeeSats:  100,
 		MarginPercent: 20.0,
-		LNbitsURL:     getEnv("LNBITS_URL", "https://joyfulseagull4.lnbits.com"),
+		LNbitsURL:     getEnv("LNBITS_URL", "https://legend.lnbits.com"),
 		LNbitsKey:     os.Getenv("LNBITS_KEY"),
 		SharedPPQKey:  os.Getenv("SHARED_PPQ_KEY"),
 		BootstrapPath: getEnv("BOOTSTRAP_PATH", "/opt/ssop/bootstrap.sh"),

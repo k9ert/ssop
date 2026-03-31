@@ -71,6 +71,8 @@ OWNER_NPUB=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get(
 OWNER_PUBKEY_HEX=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('owner_pubkey_hex', ''))")
 PLAN_NAME=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('plan_name', 'Unknown'))")
 MODEL_NAME=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('model_name', 'Unknown'))")
+GATEWAY_PORT=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('gateway_port', 18789))")
+CONFIG_TARGET_USER=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('target_user', ''))")
 
 # --- Auto-detect mode if not specified ---
 if [ -z "$MODE" ]; then
@@ -111,8 +113,10 @@ echo "Model:  $MODEL_ID"
 echo ""
 
 # --- Determine target user ---
-# If running as root, try to find the real user
-if [ "$(id -u)" -eq 0 ]; then
+# If config.json specifies a target_user, use it (local provisioning mode)
+if [ -n "$CONFIG_TARGET_USER" ]; then
+  TARGET_USER="$CONFIG_TARGET_USER"
+elif [ "$(id -u)" -eq 0 ]; then
   TARGET_USER="${SUDO_USER:-root}"
   if [ "$TARGET_USER" = "root" ]; then
     # Check common cloud-init users
@@ -634,7 +638,7 @@ EOFENV
       "profile": { "name": "$AGENT_NAME", "displayName": "$AGENT_NAME", "about": "Self-sovereign AI agent powered by SSOP ⚡" }
     }
   },
-  "gateway": { "port": 18789, "mode": "local", "auth": { "mode": "token", "token": "$GW_TOKEN" } },
+  "gateway": { "port": $GATEWAY_PORT, "mode": "local", "auth": { "mode": "token", "token": "$GW_TOKEN" } },
   "plugins": { "entries": { "nostr": { "enabled": true } } }
 }
 EOFCONFIG
@@ -820,7 +824,7 @@ EOFSVC
   
   echo "Waiting for gateway..."
   for i in $(seq 1 30); do
-    if curl -sf http://127.0.0.1:18789/health > /dev/null 2>&1; then
+    if curl -sf http://127.0.0.1:$GATEWAY_PORT/health > /dev/null 2>&1; then
       echo ""
       echo "✅ Gateway is healthy!"
       echo ""
@@ -830,7 +834,7 @@ EOFSVC
       echo "npub:      $NPUB"
       echo "Model:     ppq/$MODEL_ID"
       echo "Workspace: $WORKSPACE"
-      echo "Gateway:   http://127.0.0.1:18789"
+      echo "Gateway:   http://127.0.0.1:$GATEWAY_PORT"
       echo "GW Token:  $GW_TOKEN"
       echo "Service:   systemctl --user status openclaw-gateway"
       echo ""
