@@ -3,7 +3,7 @@
   "description": "Dependency tracking for SSOP agent Docker image — dependabot monitors this file",
   "dependencies": {
     "nostr-tools": "^2.23.0",
-    "openclaw": "2026.2.3-1",
+    "openclaw": "2026.4.5",
     "ws": "^8.19.0",
     "zod": "4.3.6"
   }
