@@ -35,7 +35,7 @@ jobs:
           CGO_ENABLED: 1
         run: go build -trimpath -o ssop-orchestrator-linux-amd64 .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ssop-orchestrator-linux-amd64
           path: orchestrator/ssop-orchestrator-linux-amd64
